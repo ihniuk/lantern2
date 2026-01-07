@@ -40,7 +40,7 @@ Lantern is a powerful, containerized network scanning and monitoring application
 
 1.  Clone the repository:
     ```bash
-    git clone https://github.com/yourusername/lantern.git
+    git clone https://github.com/ihniuk/lantern.git
     cd lantern
     ```
 
