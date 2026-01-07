@@ -41,7 +41,7 @@ Lantern is a powerful, containerized network scanning and monitoring application
 1.  Clone the repository:
     ```bash
     git clone https://github.com/ihniuk/lantern2.git
-    cd lantern
+    cd lantern2
     ```
 
 2.  Start the application:
