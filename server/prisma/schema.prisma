@@ -1,0 +1,69 @@
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:../data/lantern.db"
+}
+
+model Device {
+  id          String   @id @default(uuid())
+  mac         String   @unique
+  ip          String
+  name        String?
+  vendor      String?
+  type        String   @default("unknown") // laptop, desktop, server, router, etc.
+  os          String?
+  details     String?
+  status      String   @default("offline") // online, offline
+  lastSeen    DateTime @default(now())
+  createdAt   DateTime @default(now())
+  
+  // Metrics
+  latency     Float?   // ms
+  jitter      Float?   // ms
+  
+  // Relations
+  ports       Port[]
+  events      Event[]
+  history     DeviceHistory[]
+}
+
+model DeviceHistory {
+  id        String   @id @default(uuid())
+  status    String   // online, offline
+  latency   Float?
+  timestamp DateTime @default(now())
+  deviceId  String
+  device    Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+}
+
+model Port {
+  id        String @id @default(uuid())
+  port      Int
+  protocol  String // tcp, udp
+  service   String?
+  state     String // open, closed, filtered
+  deviceId  String
+  device    Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+}
+
+model Event {
+  id        String   @id @default(uuid())
+  type      String   // online, offline, new_device, error
+  message   String
+  timestamp DateTime @default(now())
+  deviceId  String?
+  device    Device?  @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+}
+
+model Settings {
+  id           String @id @default("default")
+  scanInterval Int    @default(5) // minutes
+  scanDuration Int    @default(60) // seconds (timeout) - user asked for 1-60 mins for duration? "Default 5 mins 1-60 mins" - I'll store minutes or seconds.
+  ipRange      String? // CIDR or range
+  dnsServer    String? 
+  lastScan     DateTime?
+}

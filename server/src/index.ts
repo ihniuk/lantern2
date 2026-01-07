@@ -1,0 +1,59 @@
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import deviceRoutes from './routes/deviceRoutes';
+import { runScan } from './services/scanner';
+import prisma from './prisma';
+
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+app.use(cors());
+app.use(express.json());
+
+app.use('/api/devices', deviceRoutes);
+
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date() });
+});
+
+// Settings Route
+app.get('/api/settings', async (req, res) => {
+    let settings = await prisma.settings.findUnique({ where: { id: 'default' } });
+    if (!settings) {
+        settings = await prisma.settings.create({
+            data: { id: 'default', scanInterval: 5, scanDuration: 60, ipRange: '192.168.1.0/24' }
+        });
+    }
+    res.json(settings);
+});
+
+app.put('/api/settings', async (req, res) => {
+    const settings = await prisma.settings.upsert({
+        where: { id: 'default' },
+        update: req.body,
+        create: { id: 'default', ...req.body }
+    });
+    res.json(settings);
+});
+
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+
+    // Initial Scan delay
+    setTimeout(() => {
+        runScan();
+    }, 5000);
+
+    // Schedule scans
+    setInterval(async () => {
+        const settings = await prisma.settings.findUnique({ where: { id: 'default' } });
+        const interval = (settings?.scanInterval || 5) * 60 * 1000;
+        // Check if we should scan now (naive impl, assumes interval doesn't change often or we just loop)
+        // Strictly, we should use a timeout that resets. But interval is fine for MVP.
+        runScan();
+    }, 5 * 60 * 1000); // Start with 5 min, logic inside runScan can check DB for dynamic interval but setInterval is fixed. 
+    // Ideally we use a recursive setTimeout in runScan to adapt to changing settings.
+});

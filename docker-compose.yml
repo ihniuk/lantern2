@@ -1,0 +1,25 @@
+services:
+  server:
+    build:
+      context: ./server
+    container_name: lantern-server
+    network_mode: host
+    restart: always
+    environment:
+      - DATABASE_URL=file:../data/lantern.db
+      - PORT=3001
+    volumes:
+      - ./data:/app/data
+      # Mount source for development if desired, but build is safer for now
+      # - ./server/src:/app/src 
+
+  client:
+    build:
+      context: ./client
+    container_name: lantern-client
+    network_mode: host
+    restart: always
+    depends_on:
+      - server
+    # Since we use host networking, client will be on port 80 of the host.
+    # Ensure no conflict with other services.
