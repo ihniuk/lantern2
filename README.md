@@ -50,7 +50,7 @@ Lantern is a powerful, containerised network scanning and monitoring application
     ```
 
 3.  Access the UI:
-    Open your browser and navigate to `http://localhost`.
+    Open your browser and navigate to `http://localhost:3005`.
 
 ## ⚙️ Configuration
 
