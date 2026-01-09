@@ -68,4 +68,17 @@ model Settings {
   ipRange      String? // CIDR or range
   dnsServer    String? 
   lastScan     DateTime?
+  speedTestIntervalMinutes Int @default(60)
+}
+
+model SpeedTestResult {
+  id             String   @id @default(uuid())
+  timestamp      DateTime @default(now())
+  ping           Float
+  jitter         Float
+  download       Float    // Mbps
+  upload         Float    // Mbps
+  packetLoss     Float?
+  isp            String?
+  serverLocation String?
 }

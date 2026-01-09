@@ -3,15 +3,20 @@ import axios from 'axios';
 import { Laptop, Server, Smartphone, Router, Shield, Radio, Tv, Circle, Settings as SettingsIcon, X, Moon, Sun, Search, Printer, Watch, ArrowUpDown, Play, Filter } from 'lucide-react';
 import { format } from 'date-fns';
 
-import { Device, Settings } from './types';
+import { Device, Settings, SpeedTestResult } from './types';
 import { IconMap } from './iconMap';
 import { DeviceDrawer } from './components/DeviceDrawer';
+import { SpeedTestDashboard } from './components/SpeedTestDashboard';
 
 function App() {
     const [devices, setDevices] = useState<Device[]>([]);
     const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [settings, setSettings] = useState<Settings>({ scanInterval: 5, scanDuration: 60, ipRange: '', dnsServer: '8.8.8.8' });
+    const [settings, setSettings] = useState<Settings>({ scanInterval: 5, scanDuration: 60, ipRange: '', dnsServer: '8.8.8.8', speedTestIntervalMinutes: 60 });
+    const [settingsTab, setSettingsTab] = useState<'scanner' | 'speedtest'>('scanner');
+
+    // View State
+    const [view, setView] = useState<'scanner' | 'speedtest'>('scanner');
 
 
     // UI State
@@ -19,6 +24,11 @@ function App() {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState<'all' | 'online' | 'offline' | 'new'>('all');
     const [sortConfig, setSortConfig] = useState<{ key: keyof Device, direction: 'asc' | 'desc' } | null>(null);
+
+    // Speed Test State
+    const [speedHistory, setSpeedHistory] = useState<SpeedTestResult[]>([]);
+    const [speedStats, setSpeedStats] = useState<any>(null);
+    const [isSpeedTesting, setIsSpeedTesting] = useState(false);
 
     useEffect(() => {
         if (darkMode) {
@@ -46,12 +56,47 @@ function App() {
         }
     };
 
+    const fetchSpeedData = async () => {
+        try {
+            const [hist, sts] = await Promise.all([
+                axios.get('/api/speedtest/history?limit=24'),
+                axios.get('/api/speedtest/stats')
+            ]);
+            setSpeedHistory(hist.data);
+            setSpeedStats(sts.data);
+        } catch (e) { console.error("Failed to fetch speed data", e); }
+    };
+
+    const runSpeedTest = async () => {
+        setIsSpeedTesting(true);
+        try {
+            await axios.post('/api/speedtest/run');
+            await fetchSpeedData();
+        } catch (e) {
+            alert('Speed test failed. check logs.');
+            console.error(e);
+        } finally {
+            setIsSpeedTesting(false);
+        }
+    };
+
     useEffect(() => {
         fetchDevices();
         fetchSettings();
-        const interval = setInterval(fetchDevices, 10000); // Poll every 10s
+        fetchSpeedData();
+        const interval = setInterval(() => {
+            fetchDevices();
+            // Optionally poll speed stats less frequently?
+        }, 10000); // Poll every 10s
         return () => clearInterval(interval);
     }, []); // eslint-disable-line
+
+    // Refetch speed data when view changes to speedtest
+    useEffect(() => {
+        if (view === 'speedtest') {
+            fetchSpeedData();
+        }
+    }, [view]);
 
     useEffect(() => {
         if (!selectedDevice) {
@@ -178,17 +223,47 @@ function App() {
                 {/* Fixed Top Section */}
                 <div className="flex-none space-y-6">
                     <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-3">
-                            <div className="bg-primary text-primary-foreground p-2 rounded-lg shadow-lg shadow-primary/20">
-                                <Radio size={24} />
+                        <div className="flex items-center gap-6">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-primary text-primary-foreground p-2 rounded-lg shadow-lg shadow-primary/20">
+                                    <Radio size={24} />
+                                </div>
+                                <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-teal-400 bg-clip-text text-transparent hidden md:block">Lantern</h1>
                             </div>
-                            <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-teal-400 bg-clip-text text-transparent">Lantern</h1>
+
+                            {/* Navigation Menu */}
+                            <nav className="flex items-center gap-1 bg-muted p-1 rounded-lg">
+                                <button
+                                    onClick={() => setView('scanner')}
+                                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${view === 'scanner' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                                >
+                                    Network Scanner
+                                </button>
+                                <button
+                                    onClick={() => setView('speedtest')}
+                                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${view === 'speedtest' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                                >
+                                    Speed Monitor
+                                </button>
+                            </nav>
                         </div>
 
                         <div className="flex gap-2">
-                            <button onClick={triggerScan} className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:opacity-90 transition-opacity font-medium text-sm">
-                                <Play size={16} /> Scan Network
-                            </button>
+                            {view === 'scanner' && (
+                                <button onClick={triggerScan} className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:opacity-90 transition-opacity font-medium text-sm">
+                                    <Play size={16} /> Scan Network
+                                </button>
+                            )}
+                            {view === 'speedtest' && (
+                                <button
+                                    onClick={runSpeedTest}
+                                    disabled={isSpeedTesting}
+                                    className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:opacity-90 transition-opacity font-medium text-sm disabled:opacity-50"
+                                >
+                                    {isSpeedTesting ? <span className="animate-spin">⟳</span> : <Play size={16} />}
+                                    {isSpeedTesting ? 'Testing...' : 'Run Speed Test'}
+                                </button>
+                            )}
                             <button onClick={() => setDarkMode(!darkMode)} className="p-2 border rounded-md hover:bg-accent transition-colors">
                                 {darkMode ? <Sun size={20} /> : <Moon size={20} />}
                             </button>
@@ -198,44 +273,48 @@ function App() {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <Card title="Total Devices" value={devices.length.toString()} />
-                        <Card title="Online" value={onlineCount.toString()} className="text-green-600" />
-                        <Card title="Offline" value={(devices.length - onlineCount).toString()} />
-                        <Card title="Status" value={scanState.isScanning ? 'Scanning...' : 'Idle'} subtitle={settings.lastScan ? `Last: ${format(new Date(settings.lastScan), 'HH:mm:ss dd/MM')}` : undefined} />
-                    </div>
-
-                    <div className="flex gap-4">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                            <input
-                                type="text"
-                                placeholder="Search by Name, IP, Vendor or MAC..."
-                                className="w-full pl-9 pr-4 py-2 bg-card border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary h-10"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                        </div>
-                        <div className="relative w-[180px]">
-                            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                            <select
-                                className="w-full pl-9 pr-4 py-2 bg-card border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary appearance-none cursor-pointer h-10"
-                                value={filterStatus}
-                                onChange={(e) => setFilterStatus(e.target.value as any)}
-                            >
-                                <option value="all">All Devices</option>
-                                <option value="online">Online Only</option>
-                                <option value="offline">Offline Only</option>
-                                <option value="new">New Devices</option>
-                            </select>
-                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">
-                                <ArrowUpDown size={12} />
+                    {view === 'scanner' ? (
+                        <>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <Card title="Total Devices" value={devices.length.toString()} />
+                                <Card title="Online" value={onlineCount.toString()} className="text-green-600" />
+                                <Card title="Offline" value={(devices.length - onlineCount).toString()} />
+                                <Card title="Status" value={scanState.isScanning ? 'Scanning...' : 'Idle'} subtitle={settings.lastScan ? `Last: ${format(new Date(settings.lastScan), 'HH:mm:ss dd/MM')}` : undefined} />
                             </div>
-                        </div>
-                    </div>
+
+                            <div className="flex gap-4">
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search by Name, IP, Vendor or MAC..."
+                                        className="w-full pl-9 pr-4 py-2 bg-card border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary h-10"
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                    />
+                                </div>
+                                <div className="relative w-[180px]">
+                                    <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                                    <select
+                                        className="w-full pl-9 pr-4 py-2 bg-card border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary appearance-none cursor-pointer h-10"
+                                        value={filterStatus}
+                                        onChange={(e) => setFilterStatus(e.target.value as any)}
+                                    >
+                                        <option value="all">All Devices</option>
+                                        <option value="online">Online Only</option>
+                                        <option value="offline">Offline Only</option>
+                                        <option value="new">New Devices</option>
+                                    </select>
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">
+                                        <ArrowUpDown size={12} />
+                                    </div>
+                                </div>
+                            </div>
+                        </>
+                    ) : null}
 
                     {/* Live Scan Terminal */}
-                    {scanState.isScanning && (
+                    {view === 'scanner' && scanState.isScanning && (
                         <div className="bg-black text-green-500 font-mono text-xs p-4 rounded-lg shadow-lg border border-green-900 overflow-hidden">
                             <div className="flex justify-between items-center border-b border-green-900 pb-2 mb-2">
                                 <span className="font-bold flex items-center gap-2"><span className="animate-pulse">●</span> LIVE SCAN TERMINAL</span>
@@ -255,65 +334,75 @@ function App() {
 
                 {/* Flexible/Scrollable Table Section */}
                 <div className="flex-1 min-h-0 bg-card border rounded-lg shadow-sm overflow-hidden flex flex-col">
-                    <div className="flex-1 overflow-auto">
-                        <table className="w-full text-left text-sm">
-                            <thead className="sticky top-0 z-10 bg-muted/90 backdrop-blur supports-[backdrop-filter]:bg-muted/60 border-b shadow-sm">
-                                <tr>
-                                    <th className="p-4 font-medium w-16">Type</th>
-                                    <th className="p-4 font-medium w-24 cursor-pointer hover:text-foreground" onClick={() => handleSort('status')}>Status <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>
-                                    <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('name')}>Name <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>
-                                    <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('ip')}>IP Address <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>
-                                    <th className="p-4 font-medium">MAC Address</th>
-                                    <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('vendor')}>Vendor <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>
-                                    <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('lastSeen')}>Last Seen <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y">
-                                {filteredDevices.map(device => {
-                                    const isNew = isNewDevice(device);
-
-                                    return (
-                                        <tr
-                                            key={device.id}
-                                            onClick={() => setSelectedDevice(device)}
-                                            className={`last:border-0 hover:bg-muted/50 cursor-pointer transition-all 
-                                                ${selectedDevice?.id === device.id ? 'bg-muted/50' : ''}
-                                                ${isNew ? 'shadow-[inset_0_0_20px_rgba(45,212,191,0.15)] bg-teal-500/5' : ''}
-                                            `}
-                                        >
-                                            <td className="p-4 text-muted-foreground w-16">
-                                                <div className="relative">
-                                                    {getIcon(device.type, device.vendor, device.customIcon)}
-                                                    {isNew && <span className="absolute -top-1 -right-1 w-2 h-2 bg-teal-400 rounded-full animate-pulse shadow-lg shadow-teal-400" />}
-                                                </div>
-                                            </td>
-                                            <td className="p-4">
-                                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${device.status === 'online'
-                                                    ? 'bg-green-500/10 text-green-600 border-green-500/20'
-                                                    : 'bg-muted text-muted-foreground border-border'
-                                                    }`}>
-                                                    <span className={`w-1.5 h-1.5 rounded-full ${device.status === 'online' ? 'bg-green-500' : 'bg-gray-400'}`} />
-                                                    {device.status}
-                                                </span>
-                                            </td>
-                                            <td className="p-4 font-medium text-foreground">{device.customName || device.name || 'Unknown'}</td>
-                                            <td className="p-4 font-mono text-muted-foreground">{device.ip}</td>
-                                            <td className="p-4 font-mono text-xs text-muted-foreground">{device.mac}</td>
-                                            <td className="p-4 text-muted-foreground">{device.vendor || '-'}</td>
-                                            <td className="p-4 text-muted-foreground whitespace-nowrap text-xs">{format(new Date(device.lastSeen), 'MMM d, HH:mm')}</td>
-                                        </tr>
-                                    );
-                                })}
-                                {filteredDevices.length === 0 && (
+                    {view === 'scanner' ? (
+                        <div className="flex-1 overflow-auto">
+                            <table className="w-full text-left text-sm">
+                                <thead className="sticky top-0 z-10 bg-muted/90 backdrop-blur supports-[backdrop-filter]:bg-muted/60 border-b shadow-sm">
                                     <tr>
-                                        <td colSpan={7} className="p-12 text-center text-muted-foreground">
-                                            No devices found.
-                                        </td>
+                                        <th className="p-4 font-medium w-16">Type</th>
+                                        <th className="p-4 font-medium w-24 cursor-pointer hover:text-foreground" onClick={() => handleSort('status')}>Status <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>
+                                        <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('name')}>Name <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>
+                                        <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('ip')}>IP Address <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>
+                                        <th className="p-4 font-medium">MAC Address</th>
+                                        <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('vendor')}>Vendor <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>
+                                        <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('lastSeen')}>Last Seen <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>
                                     </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                                </thead>
+                                <tbody className="divide-y">
+                                    {filteredDevices.map(device => {
+                                        const isNew = isNewDevice(device);
+
+                                        return (
+                                            <tr
+                                                key={device.id}
+                                                onClick={() => setSelectedDevice(device)}
+                                                className={`last:border-0 hover:bg-muted/50 cursor-pointer transition-all 
+                                                    ${selectedDevice?.id === device.id ? 'bg-muted/50' : ''}
+                                                    ${isNew ? 'shadow-[inset_0_0_20px_rgba(45,212,191,0.15)] bg-teal-500/5' : ''}
+                                                `}
+                                            >
+                                                <td className="p-4 text-muted-foreground w-16">
+                                                    <div className="relative">
+                                                        {getIcon(device.type, device.vendor, device.customIcon)}
+                                                        {isNew && <span className="absolute -top-1 -right-1 w-2 h-2 bg-teal-400 rounded-full animate-pulse shadow-lg shadow-teal-400" />}
+                                                    </div>
+                                                </td>
+                                                <td className="p-4">
+                                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${device.status === 'online'
+                                                        ? 'bg-green-500/10 text-green-600 border-green-500/20'
+                                                        : 'bg-muted text-muted-foreground border-border'
+                                                        }`}>
+                                                        <span className={`w-1.5 h-1.5 rounded-full ${device.status === 'online' ? 'bg-green-500' : 'bg-gray-400'}`} />
+                                                        {device.status}
+                                                    </span>
+                                                </td>
+                                                <td className="p-4 font-medium text-foreground">{device.customName || device.name || 'Unknown'}</td>
+                                                <td className="p-4 font-mono text-muted-foreground">{device.ip}</td>
+                                                <td className="p-4 font-mono text-xs text-muted-foreground">{device.mac}</td>
+                                                <td className="p-4 text-muted-foreground">{device.vendor || '-'}</td>
+                                                <td className="p-4 text-muted-foreground whitespace-nowrap text-xs">{format(new Date(device.lastSeen), 'MMM d, HH:mm')}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                    {filteredDevices.length === 0 && (
+                                        <tr>
+                                            <td colSpan={7} className="p-12 text-center text-muted-foreground">
+                                                No devices found.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div className="flex-1 overflow-auto p-6">
+                            <SpeedTestDashboard
+                                history={speedHistory}
+                                stats={speedStats}
+                                settings={settings}
+                            />
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -338,42 +427,74 @@ function App() {
                             <button onClick={() => setIsSettingsOpen(false)}><X size={20} /></button>
                         </div>
 
+                        <div className="flex border-b mb-6">
+                            <button
+                                className={`flex-1 pb-2 text-sm font-medium transition-colors ${settingsTab === 'scanner' ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                                onClick={() => setSettingsTab('scanner')}
+                            >
+                                Network Scanner
+                            </button>
+                            <button
+                                className={`flex-1 pb-2 text-sm font-medium transition-colors ${settingsTab === 'speedtest' ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                                onClick={() => setSettingsTab('speedtest')}
+                            >
+                                Speed Monitor
+                            </button>
+                        </div>
+
                         <div className="space-y-4">
-                            <div>
-                                <label className="text-sm font-medium mb-1 block">IP Range (CIDR)</label>
-                                <input
-                                    className="w-full p-2 border rounded bg-background"
-                                    value={settings.ipRange || ''}
-                                    placeholder="e.g., 192.168.1.0/24"
-                                    onChange={e => setSettings({ ...settings, ipRange: e.target.value })}
-                                />
-                            </div>
-                            <div>
-                                <label className="text-sm font-medium mb-1 block">Scan Interval (min)</label>
-                                <input
-                                    type="number"
-                                    className="w-full p-2 border rounded bg-background"
-                                    value={settings.scanInterval}
-                                    onChange={e => setSettings({ ...settings, scanInterval: parseInt(e.target.value) })}
-                                />
-                            </div>
-                            <div>
-                                <label className="text-sm font-medium mb-1 block">Scan Timeout (sec)</label>
-                                <input
-                                    type="number"
-                                    className="w-full p-2 border rounded bg-background"
-                                    value={settings.scanDuration}
-                                    onChange={e => setSettings({ ...settings, scanDuration: parseInt(e.target.value) })}
-                                />
-                            </div>
-                            <div>
-                                <label className="text-sm font-medium mb-1 block">DNS Server</label>
-                                <input
-                                    className="w-full p-2 border rounded bg-background"
-                                    value={settings.dnsServer}
-                                    onChange={e => setSettings({ ...settings, dnsServer: e.target.value })}
-                                />
-                            </div>
+                            {settingsTab === 'scanner' ? (
+                                <>
+                                    <div>
+                                        <label className="text-sm font-medium mb-1 block">IP Range (CIDR)</label>
+                                        <input
+                                            className="w-full p-2 border rounded bg-background"
+                                            value={settings.ipRange || ''}
+                                            placeholder="e.g., 192.168.1.0/24"
+                                            onChange={e => setSettings({ ...settings, ipRange: e.target.value })}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-medium mb-1 block">Scan Interval (min)</label>
+                                        <input
+                                            type="number"
+                                            className="w-full p-2 border rounded bg-background"
+                                            value={settings.scanInterval}
+                                            onChange={e => setSettings({ ...settings, scanInterval: parseInt(e.target.value) })}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-medium mb-1 block">Scan Timeout (sec)</label>
+                                        <input
+                                            type="number"
+                                            className="w-full p-2 border rounded bg-background"
+                                            value={settings.scanDuration}
+                                            onChange={e => setSettings({ ...settings, scanDuration: parseInt(e.target.value) })}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-medium mb-1 block">DNS Server</label>
+                                        <input
+                                            className="w-full p-2 border rounded bg-background"
+                                            value={settings.dnsServer}
+                                            onChange={e => setSettings({ ...settings, dnsServer: e.target.value })}
+                                        />
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div>
+                                        <label className="text-sm font-medium mb-1 block">Automated Test Interval (min)</label>
+                                        <input
+                                            type="number"
+                                            className="w-full p-2 border rounded bg-background"
+                                            value={settings.speedTestIntervalMinutes || 60}
+                                            onChange={e => setSettings({ ...settings, speedTestIntervalMinutes: parseInt(e.target.value) })}
+                                        />
+                                        <p className="text-xs text-muted-foreground mt-1">Set to 0 to disable automatic testing.</p>
+                                    </div>
+                                </>
+                            )}
                         </div>
 
                         <div className="mt-8 pt-4 border-t flex flex-col gap-4">

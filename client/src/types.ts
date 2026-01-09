@@ -38,4 +38,17 @@ export interface Settings {
     ipRange: string;
     dnsServer: string;
     lastScan?: string;
+    speedTestIntervalMinutes?: number;
+}
+
+export interface SpeedTestResult {
+    id: string;
+    timestamp: string;
+    ping: number;
+    jitter: number;
+    download: number;
+    upload: number;
+    packetLoss?: number;
+    isp?: string;
+    serverLocation?: string;
 }

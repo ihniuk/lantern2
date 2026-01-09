@@ -2,7 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import deviceRoutes from './routes/deviceRoutes';
+import speedTestRoutes from './routes/speedTestRoutes';
 import { runScan } from './services/scanner';
+import { initSpeedTestScheduler } from './services/speedTestService';
 import prisma from './prisma';
 
 dotenv.config();
@@ -14,6 +16,7 @@ app.use(cors());
 app.use(express.json());
 
 app.use('/api/devices', deviceRoutes);
+app.use('/api/speedtest', speedTestRoutes);
 
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date() });
@@ -36,6 +39,17 @@ app.put('/api/settings', async (req, res) => {
         update: req.body,
         create: { id: 'default', ...req.body }
     });
+
+    // Update scheduler if interval changed (or just always update, it's cheap)
+    if (req.body.speedTestIntervalMinutes) {
+        // Dynamic import to avoid circular dependency if service imports prisma from index? 
+        // Service imports prisma from library or index? Service creates its own client instance in my previous write.
+        // Actually speedTestService.ts imports PrismaClient and creates a new one.
+        // Let's import the update function.
+        const { updateSpeedTestScheduler } = require('./services/speedTestService');
+        updateSpeedTestScheduler(settings.speedTestIntervalMinutes);
+    }
+
     res.json(settings);
 });
 

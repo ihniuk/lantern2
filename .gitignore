@@ -1,2 +1,7 @@
 data/lantern.db
+server/data/*.db
+*.db
+node_modules
+dist
+.env
 
