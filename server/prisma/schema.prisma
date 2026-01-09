@@ -13,7 +13,9 @@ model Device {
   mac         String   @unique
   ip          String
   name        String?
+  customName  String?
   vendor      String?
+  customIcon  String?
   type        String   @default("unknown") // laptop, desktop, server, router, etc.
   os          String?
   details     String?

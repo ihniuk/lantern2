@@ -2,6 +2,7 @@ import prisma from '../prisma';
 import nmap from 'node-nmap';
 import { exec } from 'child_process';
 import util from 'util';
+import os from 'os';
 
 const execPromise = util.promisify(exec);
 
@@ -22,10 +23,10 @@ function guessType(vendor?: string, os?: string): string {
     const o = (os || '').toLowerCase();
 
     if (v.includes('apple')) return 'mobile'; // Or laptop, hard to say, default to mobile/tablet
-    if (v.includes('samsung') || v.includes('google') || v.includes('xiaomi')) return 'mobile';
+    if (v.includes('samsung') || v.includes('motorola') || v.includes('google') || v.includes('xiaomi')) return 'mobile';
     if (v.includes('dell') || v.includes('hp') || v.includes('lenovo')) return 'laptop';
     if (v.includes('philips') || v.includes('hue') || v.includes('nest')) return 'iot';
-    if (v.includes('ubiquiti') || v.includes('cisco') || v.includes('netgear')) return 'router';
+    if (v.includes('ubiquiti') || v.includes('cisco') || v.includes('tplink') || v.includes('netgear')) return 'router';
     if (v.includes('raspberry') || v.includes('arduino')) return 'iot';
     if (v.includes('synology') || v.includes('qnap')) return 'server';
 
@@ -110,6 +111,33 @@ export async function runScan() {
             log(`Found ${data.length} active devices`);
 
             const foundMacs = data.map((d: any) => d.mac).filter((m: any) => m);
+
+            // 0. Include Self (Host) if missing
+            // This is critical for Docker host mode or simple local scans
+            const interfaces = os.networkInterfaces();
+            for (const name of Object.keys(interfaces)) {
+                for (const iface of interfaces[name] || []) {
+                    if (iface.family === 'IPv4' && !iface.internal) {
+                        const localIp = iface.address;
+                        // specific check to see if localIp is in subnet
+                        // Simple check: compare first 3 octets for /24
+                        // Better: just check if it's already in 'data'
+                        const exists = data.find((d: any) => d.ip === localIp);
+                        if (!exists) {
+                            log(`Adding Host Device: ${localIp}`);
+                            data.push({
+                                ip: localIp,
+                                mac: iface.mac, // might be 00:00:00:00:00:00 in some containers, but try
+                                hostname: os.hostname(),
+                                vendor: 'Self (Lantern Host)',
+                                openPorts: [], // We can't easily scan self with nmap from self, often blocked/confusing. 
+                                // But we could run `netstat` or just list it as online.
+                                osNmap: os.type() + ' ' + os.release() // Use local OS info
+                            });
+                        }
+                    }
+                }
+            }
 
             // 1. Parallelize Network Lookups (NetBIOS & DNS)
             log('Resolving hostnames (DNS & NetBIOS)...');

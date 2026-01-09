@@ -1,55 +1,18 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Laptop, Server, Smartphone, Router, Shield, Radio, Tv, Circle, Play, Settings as SettingsIcon, X, Moon, Sun, Search, Printer, Watch, ArrowUpDown } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { Laptop, Server, Smartphone, Router, Shield, Radio, Tv, Circle, Settings as SettingsIcon, X, Moon, Sun, Search, Printer, Watch, ArrowUpDown, Play } from 'lucide-react';
 import { format } from 'date-fns';
 
-interface Device {
-    id: string;
-    mac: string;
-    ip: string;
-    name?: string;
-    vendor?: string;
-    type: string;
-    status: string;
-    lastSeen: string;
-    createdAt?: string;
-    os?: string;
-    details?: string;
-    events?: Event[];
-    latency?: number;
-    jitter?: number;
-    history?: DeviceHistory[];
-}
-
-interface DeviceHistory {
-    id: string;
-    status: string;
-    timestamp: string;
-    latency?: number;
-}
-
-interface Event {
-    id: string;
-    type: string;
-    message: string;
-    timestamp: string;
-}
-
-interface Settings {
-    scanInterval: number;
-    scanDuration: number;
-    ipRange: string;
-    dnsServer: string;
-    lastScan?: string;
-}
+import { Device, Settings } from './types';
+import { IconMap } from './iconMap';
+import { DeviceDrawer } from './components/DeviceDrawer';
 
 function App() {
     const [devices, setDevices] = useState<Device[]>([]);
     const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [settings, setSettings] = useState<Settings>({ scanInterval: 5, scanDuration: 60, ipRange: '', dnsServer: '8.8.8.8' });
-    const [actionOutput, setActionOutput] = useState<string | null>(null);
+
 
     // UI State
     const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
@@ -70,26 +33,17 @@ function App() {
         try {
             const res = await axios.get('/api/devices');
             setDevices(res.data);
-            // Update selected device if open
-            if (selectedDevice) {
-                const updated = res.data.find((d: Device) => d.id === selectedDevice.id);
-                if (updated) {
-                    // Fetch details to get events
-                    const detailRes = await axios.get(`/api/devices/${selectedDevice.id}`);
-                    setSelectedDevice(detailRes.data);
-                }
-            }
-        } catch (err) {
-            console.error(err);
-        }
+        } catch (e) { console.error("Failed to fetch devices", e); }
     };
 
     const fetchSettings = async () => {
         try {
             const res = await axios.get('/api/settings');
-            setSettings(res.data);
-        } catch (err) { console.error(err); }
-    }
+            if (res.data) setSettings(res.data);
+        } catch (e) {
+            // ignore if no settings yet
+        }
+    };
 
     useEffect(() => {
         fetchDevices();
@@ -100,7 +54,6 @@ function App() {
 
     useEffect(() => {
         if (!selectedDevice) {
-            setActionOutput(null);
             return;
         }
 
@@ -154,7 +107,11 @@ function App() {
         setScanState(prev => ({ ...prev, isScanning: true })); // Optimistic update
     };
 
-    const getIcon = (type: string, vendor: string = '') => {
+    const getIcon = (type: string, vendor: string = '', customIcon?: string) => {
+        if (customIcon) {
+            const IconComponent = (IconMap as any)[customIcon];
+            if (IconComponent) return <IconComponent size={20} />;
+        }
         const t = (type || '').toLowerCase();
         const v = (vendor || '').toLowerCase();
 
@@ -200,37 +157,39 @@ function App() {
     };
 
     return (
-        <div className="min-h-screen bg-background text-foreground p-8 flex flex-col md:flex-row gap-6 font-sans">
-            <div className="flex-1">
-                <div className="flex justify-between items-center mb-6">
-                    <div className="flex items-center gap-3">
-                        <div className="bg-primary text-primary-foreground p-2 rounded-lg shadow-lg shadow-primary/20">
-                            <Radio size={24} />
+        <div className="h-screen w-full bg-background text-foreground flex flex-col md:flex-row font-sans overflow-hidden">
+            <div className="flex-1 flex flex-col min-w-0 h-full p-6 md:p-8 gap-6">
+
+                {/* Fixed Top Section */}
+                <div className="flex-none space-y-6">
+                    <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-primary text-primary-foreground p-2 rounded-lg shadow-lg shadow-primary/20">
+                                <Radio size={24} />
+                            </div>
+                            <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-teal-400 bg-clip-text text-transparent">Lantern</h1>
                         </div>
-                        <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-teal-400 bg-clip-text text-transparent">Lantern</h1>
+
+                        <div className="flex gap-2">
+                            <button onClick={triggerScan} className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:opacity-90 transition-opacity font-medium text-sm">
+                                <Play size={16} /> Scan Network
+                            </button>
+                            <button onClick={() => setDarkMode(!darkMode)} className="p-2 border rounded-md hover:bg-accent transition-colors">
+                                {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+                            </button>
+                            <button onClick={() => setIsSettingsOpen(true)} className="p-2 border rounded-md hover:bg-accent transition-colors">
+                                <SettingsIcon size={20} />
+                            </button>
+                        </div>
                     </div>
 
-                    <div className="flex gap-2">
-                        <button onClick={triggerScan} className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:opacity-90 transition-opacity font-medium text-sm">
-                            <Play size={16} /> Scan Network
-                        </button>
-                        <button onClick={() => setDarkMode(!darkMode)} className="p-2 border rounded-md hover:bg-accent transition-colors">
-                            {darkMode ? <Sun size={20} /> : <Moon size={20} />}
-                        </button>
-                        <button onClick={() => setIsSettingsOpen(true)} className="p-2 border rounded-md hover:bg-accent transition-colors">
-                            <SettingsIcon size={20} />
-                        </button>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <Card title="Total Devices" value={devices.length.toString()} />
+                        <Card title="Online" value={onlineCount.toString()} className="text-green-600" />
+                        <Card title="Offline" value={(devices.length - onlineCount).toString()} />
+                        <Card title="Status" value={scanState.isScanning ? 'Scanning...' : 'Idle'} subtitle={settings.lastScan ? `Last: ${format(new Date(settings.lastScan), 'HH:mm:ss dd/MM')}` : undefined} />
                     </div>
-                </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                    <Card title="Total Devices" value={devices.length.toString()} />
-                    <Card title="Online" value={onlineCount.toString()} className="text-green-600" />
-                    <Card title="Offline" value={(devices.length - onlineCount).toString()} />
-                    <Card title="Status" value={scanState.isScanning ? 'Scanning...' : 'Idle'} subtitle={settings.lastScan ? `Last: ${format(new Date(settings.lastScan), 'HH:mm:ss dd/MM')}` : undefined} />
-                </div>
-
-                <div className="mb-6">
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
                         <input
@@ -241,31 +200,32 @@ function App() {
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
-                </div>
 
-                {/* Live Scan Terminal */}
-                {scanState.isScanning && (
-                    <div className="bg-black text-green-500 font-mono text-xs p-4 rounded-lg mb-6 shadow-lg border border-green-900 overflow-hidden">
-                        <div className="flex justify-between items-center border-b border-green-900 pb-2 mb-2">
-                            <span className="font-bold flex items-center gap-2"><span className="animate-pulse">●</span> LIVE SCAN TERMINAL</span>
-                            <span className="opacity-50 text-[10px]">{settings.ipRange || 'Default Subnet'}</span>
-                        </div>
-                        <div className="h-32 overflow-y-auto flex flex-col-reverse">
-                            {/* Reverse log order to show new at top/bottom depending on preference, actually flex-col-reverse keeps bottom anchored */}
-                            <div>
-                                {scanState.logs.map((log, i) => (
-                                    <div key={i} className="whitespace-nowrap">{log}</div>
-                                ))}
+                    {/* Live Scan Terminal */}
+                    {scanState.isScanning && (
+                        <div className="bg-black text-green-500 font-mono text-xs p-4 rounded-lg shadow-lg border border-green-900 overflow-hidden">
+                            <div className="flex justify-between items-center border-b border-green-900 pb-2 mb-2">
+                                <span className="font-bold flex items-center gap-2"><span className="animate-pulse">●</span> LIVE SCAN TERMINAL</span>
+                                <span className="opacity-50 text-[10px]">{settings.ipRange || 'Default Subnet'}</span>
+                            </div>
+                            <div className="h-32 overflow-y-auto flex flex-col-reverse">
+                                {/* Reverse log order to show new at top/bottom depending on preference, actually flex-col-reverse keeps bottom anchored */}
+                                <div>
+                                    {scanState.logs.map((log, i) => (
+                                        <div key={i} className="whitespace-nowrap">{log}</div>
+                                    ))}
+                                </div>
                             </div>
                         </div>
-                    </div>
-                )}
+                    )}
+                </div>
 
-                <div className="bg-card border rounded-lg overflow-hidden shadow-sm">
-                    <div className="overflow-x-auto">
+                {/* Flexible/Scrollable Table Section */}
+                <div className="flex-1 min-h-0 bg-card border rounded-lg shadow-sm overflow-hidden flex flex-col">
+                    <div className="flex-1 overflow-auto">
                         <table className="w-full text-left text-sm">
-                            <thead>
-                                <tr className="border-b bg-muted/40">
+                            <thead className="sticky top-0 z-10 bg-muted/90 backdrop-blur supports-[backdrop-filter]:bg-muted/60 border-b shadow-sm">
+                                <tr>
                                     <th className="p-4 font-medium w-16">Type</th>
                                     <th className="p-4 font-medium w-24 cursor-pointer hover:text-foreground" onClick={() => handleSort('status')}>Status <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>
                                     <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('name')}>Name <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>
@@ -275,7 +235,7 @@ function App() {
                                     <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('lastSeen')}>Last Seen <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody className="divide-y">
                                 {filteredDevices.map(device => {
                                     // Check if new: created within last scan duration + buffer relative to last scan time
                                     // If lastScan is brand new (app start), everything might look new, so we rely on backend timestamps.
@@ -289,14 +249,14 @@ function App() {
                                         <tr
                                             key={device.id}
                                             onClick={() => setSelectedDevice(device)}
-                                            className={`border-b last:border-0 hover:bg-muted/50 cursor-pointer transition-all 
+                                            className={`last:border-0 hover:bg-muted/50 cursor-pointer transition-all 
                                                 ${selectedDevice?.id === device.id ? 'bg-muted/50' : ''}
                                                 ${isNew ? 'shadow-[inset_0_0_20px_rgba(45,212,191,0.15)] bg-teal-500/5' : ''}
                                             `}
                                         >
                                             <td className="p-4 text-muted-foreground w-16">
                                                 <div className="relative">
-                                                    {getIcon(device.type, device.vendor)}
+                                                    {getIcon(device.type, device.vendor, device.customIcon)}
                                                     {isNew && <span className="absolute -top-1 -right-1 w-2 h-2 bg-teal-400 rounded-full animate-pulse shadow-lg shadow-teal-400" />}
                                                 </div>
                                             </td>
@@ -309,7 +269,7 @@ function App() {
                                                     {device.status}
                                                 </span>
                                             </td>
-                                            <td className="p-4 font-medium text-foreground">{device.name || 'Unknown'}</td>
+                                            <td className="p-4 font-medium text-foreground">{device.customName || device.name || 'Unknown'}</td>
                                             <td className="p-4 font-mono text-muted-foreground">{device.ip}</td>
                                             <td className="p-4 font-mono text-xs text-muted-foreground">{device.mac}</td>
                                             <td className="p-4 text-muted-foreground">{device.vendor || '-'}</td>
@@ -332,129 +292,14 @@ function App() {
 
             {/* Detail View Drawer */}
             {selectedDevice && (
-                <div className="w-full md:w-[400px] bg-card border-l md:border-l border-t md:border-t-0 p-6 shadow-xl fixed md:relative bottom-0 right-0 h-[60vh] md:h-auto overflow-y-auto z-10 flex flex-col">
-                    <div className="flex justify-between items-start mb-6">
-                        <div>
-                            <h2 className="text-xl font-bold">{selectedDevice.name || selectedDevice.ip}</h2>
-                            <div className="text-sm text-muted-foreground mt-1">Device Details</div>
-                        </div>
-                        <button onClick={() => setSelectedDevice(null)} className="p-1 hover:bg-accent rounded text-muted-foreground hover:text-foreground">
-                            <X size={20} />
-                        </button>
-                    </div>
-
-                    <div className="space-y-6 flex-1 overflow-y-auto pr-2">
-                        <div className="grid grid-cols-2 gap-4">
-                            <DetailItem label="Status" value={selectedDevice.status}
-                                badge={selectedDevice.status === 'online' ? 'green' : 'gray'} />
-                            <DetailItem label="Type" value={selectedDevice.type} />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <DetailItem label="IP Address" value={selectedDevice.ip} mono />
-                            <DetailItem label="MAC Address" value={selectedDevice.mac} mono />
-                        </div>
-
-                        <DetailItem label="Vendor" value={selectedDevice.vendor || 'Unknown'} />
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <DetailItem label="First Seen" value={selectedDevice.createdAt ? format(new Date(selectedDevice.createdAt), 'MMM d, HH:mm') : '-'} />
-                            <DetailItem label="Last Seen" value={format(new Date(selectedDevice.lastSeen), 'MMM d, HH:mm')} />
-                        </div>
-
-                        <div>
-                            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">OS / Nmap Details</div>
-                            <div className="text-xs bg-muted p-3 rounded-md font-mono whitespace-pre-wrap">
-                                {selectedDevice.details ? selectedDevice.details : (selectedDevice.os || 'No detailed scan data')}
-                            </div>
-                        </div>
-
-                        {/* Uptime Graph */}
-                        {selectedDevice.history && selectedDevice.history.length > 0 && (
-                            <div className="border-t pt-6 h-48">
-                                <h3 className="font-semibold text-sm mb-4">Uptime History</h3>
-                                <div className="h-full w-full">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <LineChart data={selectedDevice.history.map(h => ({
-                                            time: new Date(h.timestamp).getTime(),
-                                            displayTime: format(new Date(h.timestamp), 'HH:mm'),
-                                            status: h.status === 'online' ? 1 : 0
-                                        }))}>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#333" />
-                                            <XAxis
-                                                dataKey="displayTime"
-                                                stroke="#888"
-                                                fontSize={10}
-                                                tickLine={false}
-                                                interval="preserveStartEnd"
-                                            />
-                                            <YAxis
-                                                hide
-                                                domain={[0, 1]}
-                                            />
-                                            <Tooltip
-                                                contentStyle={{ backgroundColor: '#000', border: '1px solid #333' }}
-                                                labelStyle={{ color: '#888' }}
-                                                formatter={(value) => [value === 1 ? 'Online' : 'Offline', 'Status']}
-                                            />
-                                            <Line
-                                                type="stepAfter"
-                                                dataKey="status"
-                                                stroke="#10b981"
-                                                strokeWidth={2}
-                                                dot={false}
-                                                activeDot={{ r: 4, fill: '#10b981' }}
-                                            />
-                                        </LineChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </div>
-                        )}
-
-                        {selectedDevice.latency && (
-                            <div className="grid grid-cols-2 gap-4">
-                                <DetailItem label="Latency" value={`${selectedDevice.latency} ms`} />
-                                <DetailItem label="Jitter" value={`${selectedDevice.jitter || 0} ms`} />
-                            </div>
-                        )}
-
-                        {/* Actions */}
-                        <div className="border-t pt-6 space-y-3">
-                            <h3 className="font-semibold text-sm">Quick Actions</h3>
-                            <div className="grid grid-cols-3 gap-2">
-                                <DeviceAction deviceId={selectedDevice.id} type="ping" label="Ping" onOutput={setActionOutput} />
-                                <DeviceAction deviceId={selectedDevice.id} type="portscan" label="Port Scan" onOutput={setActionOutput} />
-                                <DeviceAction deviceId={selectedDevice.id} type="wol" label="WOL" onOutput={setActionOutput} />
-                            </div>
-                        </div>
-
-                        {/* Console Output */}
-                        {actionOutput && (
-                            <div className="border-t pt-6">
-                                <h3 className="font-semibold text-sm mb-2">Console Output</h3>
-                                <div className="bg-black text-green-400 p-3 rounded-md font-mono text-xs whitespace-pre-wrap overflow-x-auto">
-                                    {actionOutput}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Timeline */}
-                        <div className="border-t pt-6">
-                            <h3 className="font-semibold text-sm mb-4">Event Timeline</h3>
-                            <div className="space-y-4 relative pl-4 border-l-2 border-muted ml-2">
-                                {selectedDevice.events && selectedDevice.events.length > 0 ? selectedDevice.events.map(e => (
-                                    <div key={e.id} className="relative">
-                                        <div className={`absolute -left-[21px] top-1 w-3 h-3 rounded-full border-2 border-background ${e.type === 'online' ? 'bg-green-500' : 'bg-gray-400'}`} />
-                                        <div className="text-xs font-mono text-muted-foreground">{format(new Date(e.timestamp), 'MMM d, HH:mm:ss')}</div>
-                                        <div className="text-sm">{e.message}</div>
-                                    </div>
-                                )) : (
-                                    <div className="text-xs text-muted-foreground">No recorded events</div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <DeviceDrawer
+                    device={selectedDevice}
+                    onClose={() => setSelectedDevice(null)}
+                    onUpdate={(updated) => {
+                        setDevices(prev => prev.map(d => d.id === updated.id ? updated : d));
+                        setSelectedDevice(updated);
+                    }}
+                />
             )}
 
             {/* Settings Dialog */}
@@ -520,30 +365,6 @@ function App() {
     );
 }
 
-function DetailItem({ label, value, mono, badge }: { label: string, value: string, mono?: boolean, badge?: 'green' | 'gray' }) {
-    return (
-        <div>
-            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">{label}</div>
-            <div className={`text-sm ${mono ? 'font-mono' : ''} ${badge ? `inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${badge === 'green' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-700 border-gray-200'}` : ''}`}>
-                {value}
-            </div>
-        </div>
-    )
-}
-
-function ActionButton({ onClick, label, loading }: { onClick: () => void, label: string, loading?: boolean }) {
-    return (
-        <button
-            onClick={onClick}
-            disabled={loading}
-            className="px-3 py-2 border rounded-md hover:bg-accent text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-        >
-            {loading ? <span className="animate-spin mr-2">⟳</span> : null}
-            {loading ? 'Running...' : label}
-        </button>
-    )
-}
-
 function Card({ title, value, className, subtitle }: { title: string, value: string, className?: string, subtitle?: string }) {
     return (
         <div className="p-4 rounded-lg border bg-card text-card-foreground shadow-sm">
@@ -552,31 +373,6 @@ function Card({ title, value, className, subtitle }: { title: string, value: str
             {subtitle && <div className="text-xs text-muted-foreground mt-1">{subtitle}</div>}
         </div>
     )
-}
-
-function DeviceAction({ deviceId, type, label, onOutput }: { deviceId: string, type: string, label: string, onOutput: (out: string) => void }) {
-    const [loading, setLoading] = useState(false);
-
-    const handleAction = async () => {
-        setLoading(true);
-        onOutput(`> Executing ${label}...\n`); // Immediate feedback
-        try {
-            const res = await axios.post(`/api/devices/${deviceId}/action`, { type });
-            if (res.data.output) {
-                onOutput(res.data.output);
-            } else if (res.data.message) {
-                onOutput(`> ${res.data.message}`);
-            } else {
-                onOutput(JSON.stringify(res.data, null, 2));
-            }
-        } catch (err: any) {
-            onOutput(`Error: ${err.message}`);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return <ActionButton onClick={handleAction} label={label} loading={loading} />;
 }
 
 export default App;

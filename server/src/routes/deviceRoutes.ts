@@ -47,7 +47,22 @@ router.get('/:id', async (req, res) => {
     res.json(device);
 });
 
-// Update device
+// Update device (PATCH)
+router.patch('/:id', async (req, res) => {
+    const { customName, customIcon } = req.body;
+    try {
+        const device = await prisma.device.update({
+            where: { id: req.params.id },
+            data: {
+                customName,
+                customIcon
+            }
+        });
+        res.json(device);
+    } catch (e) {
+        res.status(500).json({ error: "Failed to update device" });
+    }
+});
 router.put('/:id', async (req, res) => {
     const { name, type, vendor } = req.body;
     const device = await prisma.device.update({
