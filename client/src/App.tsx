@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Laptop, Server, Smartphone, Router, Shield, Radio, Tv, Circle, Settings as SettingsIcon, X, Moon, Sun, Search, Printer, Watch, ArrowUpDown, Play } from 'lucide-react';
+import { Laptop, Server, Smartphone, Router, Shield, Radio, Tv, Circle, Settings as SettingsIcon, X, Moon, Sun, Search, Printer, Watch, ArrowUpDown, Play, Filter } from 'lucide-react';
 import { format } from 'date-fns';
 
 import { Device, Settings } from './types';
@@ -17,6 +17,7 @@ function App() {
     // UI State
     const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
     const [searchTerm, setSearchTerm] = useState('');
+    const [filterStatus, setFilterStatus] = useState<'all' | 'online' | 'offline' | 'new'>('all');
     const [sortConfig, setSortConfig] = useState<{ key: keyof Device, direction: 'asc' | 'desc' } | null>(null);
 
     useEffect(() => {
@@ -128,17 +129,31 @@ function App() {
         return <Circle size={20} className="opacity-50" />;
     };
 
+    const isNewDevice = (device: Device) => {
+        if (!settings.lastScan || !device.createdAt) return false;
+        // Logic: If CreatedAt is close to LastSeen (within 2 mins) AND LastSeen is recent
+        return new Date(device.createdAt).getTime() > (new Date(settings.lastScan).getTime() - (settings.scanDuration * 1000) - 30000);
+    };
+
     const onlineCount = devices.filter(d => d.status === 'online').length;
 
     // Filter and Sort
     const filteredDevices = devices.filter(d => {
         const searchLower = searchTerm.toLowerCase();
-        return (
+        const matchesSearch = (
             d.name?.toLowerCase().includes(searchLower) ||
             d.ip.includes(searchTerm) ||
             d.vendor?.toLowerCase().includes(searchLower) ||
             d.mac?.toLowerCase().includes(searchLower)
         );
+
+        if (!matchesSearch) return false;
+
+        if (filterStatus === 'online') return d.status === 'online';
+        if (filterStatus === 'offline') return d.status !== 'online';
+        if (filterStatus === 'new') return isNewDevice(d);
+
+        return true;
     }).sort((a, b) => {
         if (!sortConfig) return 0;
         const aValue = a[sortConfig.key] || '';
@@ -190,15 +205,33 @@ function App() {
                         <Card title="Status" value={scanState.isScanning ? 'Scanning...' : 'Idle'} subtitle={settings.lastScan ? `Last: ${format(new Date(settings.lastScan), 'HH:mm:ss dd/MM')}` : undefined} />
                     </div>
 
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                        <input
-                            type="text"
-                            placeholder="Search by Name, IP, Vendor or MAC..."
-                            className="w-full pl-9 pr-4 py-2 bg-card border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
+                    <div className="flex gap-4">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                            <input
+                                type="text"
+                                placeholder="Search by Name, IP, Vendor or MAC..."
+                                className="w-full pl-9 pr-4 py-2 bg-card border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary h-10"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        <div className="relative w-[180px]">
+                            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                            <select
+                                className="w-full pl-9 pr-4 py-2 bg-card border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary appearance-none cursor-pointer h-10"
+                                value={filterStatus}
+                                onChange={(e) => setFilterStatus(e.target.value as any)}
+                            >
+                                <option value="all">All Devices</option>
+                                <option value="online">Online Only</option>
+                                <option value="offline">Offline Only</option>
+                                <option value="new">New Devices</option>
+                            </select>
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">
+                                <ArrowUpDown size={12} />
+                            </div>
+                        </div>
                     </div>
 
                     {/* Live Scan Terminal */}
@@ -237,13 +270,7 @@ function App() {
                             </thead>
                             <tbody className="divide-y">
                                 {filteredDevices.map(device => {
-                                    // Check if new: created within last scan duration + buffer relative to last scan time
-                                    // If lastScan is brand new (app start), everything might look new, so we rely on backend timestamps.
-                                    // Logic: If CreatedAt is close to LastSeen (within 2 mins) AND LastSeen is recent (within 5 mins of now)
-                                    // Actually simpler: If CreatedAt > (Now - 5 mins)
-                                    // User requirement: "from the last scan".
-                                    const isNew = settings.lastScan && device.createdAt &&
-                                        new Date(device.createdAt).getTime() > (new Date(settings.lastScan).getTime() - (settings.scanDuration * 1000) - 30000);
+                                    const isNew = isNewDevice(device);
 
                                     return (
                                         <tr
@@ -280,7 +307,7 @@ function App() {
                                 {filteredDevices.length === 0 && (
                                     <tr>
                                         <td colSpan={7} className="p-12 text-center text-muted-foreground">
-                                            No devices found. Run a scan to populate the list.
+                                            No devices found.
                                         </td>
                                     </tr>
                                 )}

@@ -50,6 +50,18 @@ export function DeviceDrawer({ device, onClose, onUpdate }: DeviceDrawerProps) {
         }
     };
 
+    // Helper to parse details JSON safely
+    const parseDetails = (jsonDetails: string | null | undefined) => {
+        if (!jsonDetails) return null;
+        try {
+            return JSON.parse(jsonDetails);
+        } catch (e) {
+            return null;
+        }
+    };
+
+    const detailsObj = parseDetails(device.details);
+
     return (
         <div className="w-full md:w-[400px] bg-card border-l md:border-l border-t md:border-t-0 p-6 shadow-xl fixed md:relative bottom-0 right-0 h-[60vh] md:h-auto overflow-y-auto z-10 flex flex-col">
             <div className="flex justify-between items-start mb-6">
@@ -135,11 +147,44 @@ export function DeviceDrawer({ device, onClose, onUpdate }: DeviceDrawerProps) {
                         <DetailItem label="Last Seen" value={format(new Date(device.lastSeen), 'MMM d, HH:mm')} />
                     </div>
 
+                    {/* Detailed OS / Nmap Info Formatted */}
                     <div>
-                        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">OS / Nmap Details</div>
-                        <div className="text-xs bg-muted p-3 rounded-md font-mono whitespace-pre-wrap">
-                            {device.details ? device.details : (device.os || 'No detailed scan data')}
-                        </div>
+                        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">OS / Network Details</div>
+                        {detailsObj ? (
+                            <div className="bg-muted/50 rounded-md p-3 text-sm space-y-3 border">
+                                {detailsObj.osNmap && (
+                                    <div>
+                                        <div className="text-xs text-muted-foreground mb-1">OS Detection</div>
+                                        <div className="font-medium">{detailsObj.osNmap}</div>
+                                    </div>
+                                )}
+                                {detailsObj.hostname && (
+                                    <div>
+                                        <div className="text-xs text-muted-foreground mb-1">Hostname</div>
+                                        <div className="font-mono text-xs">{detailsObj.hostname}</div>
+                                    </div>
+                                )}
+                                {detailsObj.openPorts && detailsObj.openPorts.length > 0 && (
+                                    <div>
+                                        <div className="text-xs text-muted-foreground mb-1">Open Ports</div>
+                                        <div className="flex flex-wrap gap-1">
+                                            {detailsObj.openPorts.map((p: any, i: number) => (
+                                                <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded textxs font-mono bg-background border text-foreground">
+                                                    {p.port}/{p.service}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {!detailsObj.osNmap && !detailsObj.hostname && (!detailsObj.openPorts || detailsObj.openPorts.length === 0) && (
+                                    <div className="text-muted-foreground italic text-xs">No specific details found.</div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="text-xs bg-muted p-3 rounded-md italic text-muted-foreground">
+                                {device.os || 'No detailed scan data available.'}
+                            </div>
+                        )}
                     </div>
 
                     {/* Uptime Graph */}
