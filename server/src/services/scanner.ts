@@ -28,7 +28,7 @@ function guessType(vendor?: string, os?: string): string {
     if (v.includes('philips') || v.includes('hue') || v.includes('nest')) return 'iot';
     if (v.includes('ubiquiti') || v.includes('cisco') || v.includes('tplink') || v.includes('netgear')) return 'router';
     if (v.includes('raspberry') || v.includes('arduino')) return 'iot';
-    if (v.includes('synology') || v.includes('qnap')) return 'server';
+    if (v.includes('synology') || v.includes('ugreen') || v.includes('qnap')) return 'server';
 
     if (o.includes('windows')) return 'laptop'; // or desktop
     if (o.includes('linux')) return 'server'; // broad assumption
