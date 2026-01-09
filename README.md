@@ -1,12 +1,17 @@
-# Lantern - Modern Network Scanner
+# Lantern II - Modern Network Scanner & Speed Monitor
 
-Lantern is a powerful, containerised network scanning and monitoring application. It discovers devices on your local subnet, tracks their uptime status, and provides detailed insights via a sleek, modern React interface.
+Lantern II is a powerful, containerised network scanning and monitoring application. It discovers devices on your local subnet, tracks their uptime status, monitors your internet connection quality, and provides detailed insights via a sleek, modern React interface.
 
 
 ## 🚀 Features
 
 *   **Host Discovery**: Automatically scans your configured subnet (e.g., `192.168.1.0/24`) to find connected devices.
 *   **Real-time Status**: Tracks device online/offline status with an event timeline and uptime history graph.
+*   **Internet Speed Monitor**:
+    *   **Automated Testing**: Configurable background speed tests (via Ookla).
+    *   **Performance Analytics**: Visualize Download, Upload, and Ping trends over 24h.
+    *   **Historical Data**: Track ISP reliability and average speeds over time.
+    *   **Next Run Indicator**: Know exactly when the next test is scheduled.
 *   **Deep Scanning**:
     *   **Port Scanning**: Checks for common open ports.
     *   **OS Detection**: Attempts to identify the operating system of discovered devices.
@@ -17,9 +22,9 @@ Lantern is a powerful, containerised network scanning and monitoring application
     *   **Interactive Table**: Sortable columns and detailed device drawers.
     *   **Live Terminal**: Watch scan logs in real-time.
 *   **Management**:
-    *   Trigger manual scans.
+    *   Trigger manual scans or speed tests.
     *   Wake-on-LAN (WOL) support.
-    *   Configurable scan intervals.
+    *   Configurable scan and speed test intervals.
 
 ## 🛠️ Technology Stack
 
@@ -56,7 +61,9 @@ Lantern is a powerful, containerised network scanning and monitoring application
 Click the **Settings** (gear icon) in the UI to configure:
 
 *   **IP Range**: The CIDR range to scan (Default: `192.168.1.0/24`). *Ensure this matches your local network.*
-*   **Scan Interval**: Frequency of automatic background scans.
+*   **Speed Test Interval**: Frequency of automatic background speed tests (Default: `15` minutes).
+*   **DNS Server**: The DNS server to use for your network (Default: `8.8.8.8`).
+*   **Scan Interval**: Frequency of automatic background scans (Default: `15` minutes).
 
 ## 📂 Project Structure
 
