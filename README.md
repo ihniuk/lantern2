@@ -1,8 +1,7 @@
 # Lantern - Modern Network Scanner
 
-Lantern is a powerful, containerized network scanning and monitoring application. It discovers devices on your local subnet, tracks their uptime status, and provides detailed insights via a sleek, modern React interface.
+Lantern is a powerful, containerised network scanning and monitoring application. It discovers devices on your local subnet, tracks their uptime status, and provides detailed insights via a sleek, modern React interface.
 
-![Lantern UI](https://via.placeholder.com/800x450.png?text=Lantern+UI+Placeholder)
 
 ## 🚀 Features
 
@@ -50,7 +49,7 @@ Lantern is a powerful, containerized network scanning and monitoring application
     ```
 
 3.  Access the UI:
-    Open your browser and navigate to `http://localhost`.
+    Open your browser and navigate to `http://localhost:3005`.
 
 ## ⚙️ Configuration
 
