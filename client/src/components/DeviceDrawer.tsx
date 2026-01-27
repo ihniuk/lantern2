@@ -10,18 +10,29 @@ interface DeviceDrawerProps {
     device: Device;
     onClose: () => void;
     onUpdate: (device: Device) => void;
+    uniqueVendors?: string[];
+    uniqueTypes?: string[];
+    uniqueOS?: string[];
 }
 
-export function DeviceDrawer({ device, onClose, onUpdate }: DeviceDrawerProps) {
+export function DeviceDrawer({ device, onClose, onUpdate, uniqueVendors = [], uniqueTypes = [], uniqueOS = [] }: DeviceDrawerProps) {
     const [isEditing, setIsEditing] = useState(false);
     const [editName, setEditName] = useState(device.customName || device.name || '');
+    const [editVendor, setEditVendor] = useState(device.customVendor || device.vendor || '');
+    const [editType, setEditType] = useState(device.customType || device.type || '');
+    const [editOS, setEditOS] = useState(device.customOS || device.os || '');
     const [editIcon, setEditIcon] = useState(device.customIcon || '');
+    const [editTags, setEditTags] = useState<string[]>(device.tags || []);
     const [actionOutput, setActionOutput] = useState<string | null>(null);
 
     // Sync state when device changes
     useEffect(() => {
         setEditName(device.customName || device.name || '');
+        setEditVendor(device.customVendor || device.vendor || '');
+        setEditType(device.customType || device.type || '');
+        setEditOS(device.customOS || device.os || '');
         setEditIcon(device.customIcon || '');
+        setEditTags(device.tags || []);
         setActionOutput(null); // Clear output on device switch
     }, [device]);
 
@@ -29,7 +40,11 @@ export function DeviceDrawer({ device, onClose, onUpdate }: DeviceDrawerProps) {
         try {
             const res = await axios.patch(`/api/devices/${device.id}`, {
                 customName: editName,
-                customIcon: editIcon
+                customVendor: editVendor,
+                customType: editType,
+                customOS: editOS,
+                customIcon: editIcon,
+                tags: editTags
             });
             onUpdate(res.data);
             setIsEditing(false);
@@ -78,6 +93,75 @@ export function DeviceDrawer({ device, onClose, onUpdate }: DeviceDrawerProps) {
                                 />
                             </div>
 
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-semibold text-muted-foreground uppercase">Vendor</label>
+                                    <input
+                                        className="w-full p-2 border rounded bg-background text-foreground mt-1"
+                                        value={editVendor}
+                                        onChange={e => setEditVendor(e.target.value)}
+                                        placeholder={device.vendor || "Unknown"}
+                                        list="vendor-list"
+                                    />
+                                    <datalist id="vendor-list">
+                                        {uniqueVendors.map(v => <option key={v} value={v} />)}
+                                    </datalist>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-semibold text-muted-foreground uppercase">Type</label>
+                                    <input
+                                        className="w-full p-2 border rounded bg-background text-foreground mt-1"
+                                        value={editType}
+                                        onChange={e => setEditType(e.target.value)}
+                                        placeholder={device.type || "unknown"}
+                                        list="type-list"
+                                    />
+                                    <datalist id="type-list">
+                                        {uniqueTypes.map(t => <option key={t} value={t} />)}
+                                    </datalist>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-semibold text-muted-foreground uppercase">OS / Device Model</label>
+                                <input
+                                    className="w-full p-2 border rounded bg-background text-foreground mt-1"
+                                    value={editOS}
+                                    onChange={e => setEditOS(e.target.value)}
+                                    placeholder={device.os || "Unknown"}
+                                    list="os-list"
+                                />
+                                <datalist id="os-list">
+                                    {uniqueOS.map(o => <option key={o} value={o} />)}
+                                </datalist>
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-semibold text-muted-foreground uppercase">Tags</label>
+                                <div className="flex flex-wrap gap-2 mt-1 mb-2">
+                                    {editTags.map(tag => (
+                                        <span key={tag} className="bg-primary/10 text-primary px-2 py-0.5 rounded text-xs flex items-center gap-1">
+                                            {tag}
+                                            <button onClick={() => setEditTags(editTags.filter(t => t !== tag))} className="hover:text-red-500"><X size={12} /></button>
+                                        </span>
+                                    ))}
+                                </div>
+                                <input
+                                    className="w-full p-2 border rounded bg-background text-foreground text-sm"
+                                    placeholder="Add tag and press Enter"
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter') {
+                                            const val = e.currentTarget.value.trim();
+                                            if (val && !editTags.includes(val)) {
+                                                setEditTags([...editTags, val]);
+                                                e.currentTarget.value = '';
+                                            }
+                                            e.preventDefault();
+                                        }
+                                    }}
+                                />
+                            </div>
+
                             <div>
                                 <label className="text-xs font-semibold text-muted-foreground uppercase">Icon</label>
                                 <div className="grid grid-cols-5 gap-2 mt-2">
@@ -97,11 +181,27 @@ export function DeviceDrawer({ device, onClose, onUpdate }: DeviceDrawerProps) {
                                 </div>
                             </div>
 
-                            <div className="flex justify-end gap-2 pt-2">
-                                <button onClick={() => setIsEditing(false)} className="px-3 py-1 rounded hover:bg-muted text-sm border">Cancel</button>
-                                <button onClick={handleSave} className="px-3 py-1 rounded bg-primary text-primary-foreground text-sm flex items-center gap-1">
-                                    <Check size={14} /> Save
+                            <div className="flex justify-between gap-2 pt-2 border-t mt-4">
+                                <button
+                                    onClick={async () => {
+                                        if (confirm("Are you sure you want to delete this device?")) {
+                                            try {
+                                                await axios.delete(`/api/devices/${device.id}`);
+                                                onClose();
+                                                onUpdate({ ...device, deleted: true } as any); // Signal deletion
+                                            } catch (e) { alert("Failed to delete"); }
+                                        }
+                                    }}
+                                    className="px-3 py-1 rounded bg-red-50 text-red-600 border border-red-200 text-sm hover:bg-red-100"
+                                >
+                                    Delete Device
                                 </button>
+                                <div className="flex gap-2">
+                                    <button onClick={() => setIsEditing(false)} className="px-3 py-1 rounded hover:bg-muted text-sm border">Cancel</button>
+                                    <button onClick={handleSave} className="px-3 py-1 rounded bg-primary text-primary-foreground text-sm flex items-center gap-1">
+                                        <Check size={14} /> Save
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     ) : (
@@ -132,7 +232,7 @@ export function DeviceDrawer({ device, onClose, onUpdate }: DeviceDrawerProps) {
                     <div className="grid grid-cols-2 gap-4">
                         <DetailItem label="Status" value={device.status}
                             badge={device.status === 'online' ? 'green' : 'gray'} />
-                        <DetailItem label="Type" value={device.type} />
+                        <DetailItem label="Type" value={device.customType || device.type} />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
@@ -140,7 +240,7 @@ export function DeviceDrawer({ device, onClose, onUpdate }: DeviceDrawerProps) {
                         <DetailItem label="MAC Address" value={device.mac} mono />
                     </div>
 
-                    <DetailItem label="Vendor" value={device.vendor || 'Unknown'} />
+                    <DetailItem label="Vendor" value={device.customVendor || device.vendor || 'Unknown'} />
 
                     <div className="grid grid-cols-2 gap-4">
                         <DetailItem label="First Seen" value={device.createdAt ? format(new Date(device.createdAt), 'MMM d, HH:mm') : '-'} />

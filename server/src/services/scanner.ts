@@ -8,12 +8,47 @@ const execPromise = util.promisify(exec);
 
 // Function to get local subnet automatically if not configured
 // This is a naive implementation, ideally we parse interface info
+// Helper to count bits in netmask
+function netmaskToCIDR(netmask: string): number {
+    return (netmask.split('.').map(Number)
+        .map(part => (part >>> 0).toString(2))
+        .join('')
+        .match(/1/g) || []).length;
+}
+
+// Calculate Network Address from IP and Netmask
+function calculateNetworkAddress(ip: string, netmask: string): string {
+    const ipParts = ip.split('.').map(Number);
+    const maskParts = netmask.split('.').map(Number);
+    const networkParts = ipParts.map((part, index) => part & maskParts[index]);
+    return networkParts.join('.');
+}
+
 async function getLocalSubnet(): Promise<string> {
     const settings = await prisma.settings.findUnique({ where: { id: 'default' } });
-    if (settings?.ipRange) return settings.ipRange;
+    if (settings?.ipRange) {
+        log(`Using configured IP Range: ${settings.ipRange}`);
+        return settings.ipRange;
+    }
 
-    // Fallback: assume 192.168.1.0/24 or verify via shell command (ip addr)
-    // For now returning a default common subnet, will enhance later
+    // Auto-detect from Interfaces
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name] || []) {
+            // Skip internal (localhost) and non-IPv4
+            if (iface.family === 'IPv4' && !iface.internal) {
+                // Heuristic: Prefer interfaces that look like typical LANs (192., 10., 172.)
+                // But honestly, the first valid external IPv4 is usually the one we want in Host mode.
+                const cidr = netmaskToCIDR(iface.netmask);
+                const network = calculateNetworkAddress(iface.address, iface.netmask);
+                const range = `${network}/${cidr}`;
+                log(`Auto-detected Subnet: ${range} (via ${name})`);
+                return range;
+            }
+        }
+    }
+
+    log('Could not auto-detect subnet, falling back to default.');
     return '192.168.1.0/24';
 }
 
@@ -21,6 +56,11 @@ async function getLocalSubnet(): Promise<string> {
 function guessType(vendor?: string, os?: string): string {
     const v = (vendor || '').toLowerCase();
     const o = (os || '').toLowerCase();
+
+    // VM Detection High Priority
+    if (v.includes('vmware') || v.includes('virtualbox') || v.includes('qemu') || v.includes('parallels')) return 'vm';
+    // Hyper-V special case: Microsoft Vendor + Linux OS = VM
+    if (v.includes('microsoft') && o.includes('linux')) return 'vm';
 
     if (v.includes('apple')) return 'mobile'; // Or laptop, hard to say, default to mobile/tablet
     if (v.includes('samsung') || v.includes('motorola') || v.includes('google') || v.includes('xiaomi')) return 'mobile';
@@ -58,6 +98,97 @@ async function getNetbiosName(ip: string): Promise<string | null> {
         }
         return null;
     } catch (e) { return null; }
+}
+
+// mDNS Lookup Helper
+import mDNS from 'multicast-dns';
+import { Client as SsdpClient } from 'node-ssdp';
+
+// ... (keep mDNS helper)
+
+async function batchSsdpLookup(timeoutMs = 3000): Promise<Map<string, string>> {
+    const client = new SsdpClient();
+    const results = new Map<string, string>();
+
+    return new Promise((resolve) => {
+        client.on('response', (headers, statusCode, rinfo) => {
+            if (headers.SERVER || headers.USN) {
+                // Try to guess a name from SERVER string or USN
+                // e.g. "Linux/2.x UPnP/1.0 Avahi/0.6.x" -> maybe just "Avahi"
+                // e.g. "Philips-hue-bridge/1.0 UPnP/1.0 IpBridge/1.17.0" -> "Philips-hue-bridge"
+                let name = String(headers.SERVER || '');
+
+                // Smart cleanup of common messy server strings
+                if (name.includes('Philips-hue-bridge')) name = 'Philips Hue Bridge';
+                else if (name.includes('Sonos')) name = 'Sonos Speaker';
+                else if (name.toLowerCase().includes('samsung')) name = 'Samsung Device';
+                else if (name.includes('UPnP')) {
+                    // Try to grab the first useful word
+                    name = name.split('/')[0].split(' ')[0];
+                }
+
+                if (name && rinfo.address) {
+                    results.set(rinfo.address, name);
+                }
+            }
+        });
+
+        client.search('ssdp:all');
+
+        setTimeout(() => {
+            client.stop();
+            resolve(results);
+        }, timeoutMs);
+    });
+}
+
+function reverseIpToArpa(ip: string): string {
+    return ip.split('.').reverse().join('.') + '.in-addr.arpa';
+}
+
+async function batchMdnsLookup(ips: string[], timeoutMs = 2000): Promise<Map<string, string>> {
+    const mdns = mDNS();
+    const results = new Map<string, string>();
+
+    // Prepare questions
+    const questions = ips.map(ip => ({
+        name: reverseIpToArpa(ip),
+        type: 'PTR' as const
+    }));
+
+    return new Promise((resolve) => {
+        mdns.on('response', (response) => {
+            response.answers.forEach(answer => {
+                if (answer.type === 'PTR') {
+                    // answer.name might be 19.0.0.10.in-addr.arpa
+                    const parts = answer.name.replace('.in-addr.arpa', '').split('.').reverse().join('.');
+                    if (ips.includes(parts) && typeof answer.data === 'string') {
+                        results.set(parts, answer.data);
+                    }
+                }
+            });
+            response.additionals.forEach(add => {
+                if (add.type === 'A' && typeof add.name === 'string' && typeof add.data === 'string') {
+                    if (ips.includes(add.data)) {
+                        results.set(add.data, add.name);
+                    }
+                }
+            });
+        });
+
+        try {
+            mdns.query(questions);
+        } catch (e) {
+            console.error('mDNS Query Error:', e);
+        }
+
+        setTimeout(() => {
+            try {
+                mdns.destroy();
+            } catch (e) { }
+            resolve(results);
+        }, timeoutMs);
+    });
 }
 
 // Scan State
@@ -139,12 +270,31 @@ export async function runScan() {
                 }
             }
 
-            // 1. Parallelize Network Lookups (NetBIOS & DNS)
+            // 1a. Batch mDNS Lookup
+            log('Resolving hostnames (mDNS)...');
+            const mdnsMap = await batchMdnsLookup(data.map((d: any) => d.ip));
+            log(`mDNS resolved ${mdnsMap.size} hosts`);
+
+            // 1b. Batch SSDP Lookup
+            log('Resolving hostnames (SSDP)...');
+            const ssdpMap = await batchSsdpLookup(3000);
+            log(`SSDP resolved ${ssdpMap.size} hosts`);
+
+            // 1c. Parallelize Network Lookups (NetBIOS & DNS)
             log('Resolving hostnames (DNS & NetBIOS)...');
             const enrichedHosts = await Promise.all(data.map(async (host) => {
                 if (!host.mac) return { ...host, finalName: null, type: 'unknown' };
 
                 let finalName = host.hostname;
+
+                // mDNS High Priority
+                if (mdnsMap.has(host.ip)) {
+                    finalName = mdnsMap.get(host.ip);
+                }
+                // SSDP Fallback (often has better Model Names like "Sonos")
+                else if (ssdpMap.has(host.ip)) {
+                    finalName = ssdpMap.get(host.ip);
+                }
 
                 // DNS
                 if (!finalName || finalName === host.ip) {

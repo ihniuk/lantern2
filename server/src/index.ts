@@ -61,6 +61,9 @@ app.listen(PORT, () => {
         runScan();
     }, 5000);
 
+    // Initialize Speed Test Scheduler
+    initSpeedTestScheduler();
+
     // Schedule scans
     setInterval(async () => {
         const settings = await prisma.settings.findUnique({ where: { id: 'default' } });

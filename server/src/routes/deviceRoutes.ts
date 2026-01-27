@@ -31,6 +31,13 @@ router.get('/', async (req, res) => {
         return 0;
     });
 
+    // Parse tags
+    devices.forEach(d => {
+        if (d.tags) {
+            try { (d as any).tags = JSON.parse(d.tags); } catch (e) { (d as any).tags = []; }
+        }
+    });
+
     res.json(devices);
 });
 
@@ -44,20 +51,33 @@ router.get('/:id', async (req, res) => {
             history: { orderBy: { timestamp: 'asc' }, take: 200 }
         } // history asc for graph
     });
+    if (device && device.tags) {
+        try { (device as any).tags = JSON.parse(device.tags); } catch (e) { (device as any).tags = []; }
+    }
     res.json(device);
 });
 
 // Update device (PATCH)
 router.patch('/:id', async (req, res) => {
-    const { customName, customIcon } = req.body;
+    const { customName, customIcon, customVendor, customType, customOS, tags } = req.body;
     try {
         const device = await prisma.device.update({
             where: { id: req.params.id },
             data: {
                 customName,
-                customIcon
+                customIcon,
+                customVendor,
+                customType,
+                customOS,
+                tags: tags ? JSON.stringify(tags) : undefined
             }
         });
+        // Parse tags back for response so client receives array
+        if (device.tags) {
+            try {
+                (device as any).tags = JSON.parse(device.tags);
+            } catch (e) { }
+        }
         res.json(device);
     } catch (e) {
         res.status(500).json({ error: "Failed to update device" });
@@ -76,6 +96,23 @@ router.put('/:id', async (req, res) => {
 router.post('/scan', async (req, res) => {
     runScan();
     res.json({ message: 'Scan started' });
+});
+
+// Delete single device
+router.delete('/:id', async (req, res) => {
+    try {
+        const id = req.params.id;
+        // Clean up related data first
+        await prisma.port.deleteMany({ where: { deviceId: id } });
+        await prisma.deviceHistory.deleteMany({ where: { deviceId: id } });
+        await prisma.event.deleteMany({ where: { deviceId: id } });
+
+        await prisma.device.delete({ where: { id } });
+        res.json({ message: 'Device deleted' });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'Failed to delete device' });
+    }
 });
 
 // Clear all devices

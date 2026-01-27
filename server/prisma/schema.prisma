@@ -16,6 +16,10 @@ model Device {
   customName  String?
   vendor      String?
   customIcon  String?
+  customVendor String?
+  customType   String?
+  customOS     String?
+  tags         String?  // JSON string array ["tag1", "tag2"]
   type        String   @default("unknown") // laptop, desktop, server, router, etc.
   os          String?
   details     String?

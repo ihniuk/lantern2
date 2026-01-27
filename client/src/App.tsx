@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Laptop, Server, Smartphone, Router, Shield, Radio, Tv, Circle, Settings as SettingsIcon, X, Moon, Sun, Search, Printer, Watch, ArrowUpDown, Play, Filter } from 'lucide-react';
+import { Laptop, Server, Smartphone, Router, Shield, Radio, Tv, Circle, Settings as SettingsIcon, X, Moon, Sun, Search, Printer, Watch, ArrowUpDown, Play, Filter, Box, LayoutTemplate, Download, Upload } from 'lucide-react';
 import { format } from 'date-fns';
 
 import { Device, Settings, SpeedTestResult } from './types';
@@ -140,7 +140,8 @@ function App() {
                     if (res.data.isScanning) {
                         // scanning
                     } else {
-                        fetchDevices(); // Refresh when done
+                        fetchDevices(); // Refresh devices
+                        fetchSettings(); // Refresh timestamp
                     }
                 } catch (e) { console.error(e); }
             }, 1000); // 1s polling for live feel
@@ -151,6 +152,30 @@ function App() {
     const triggerScan = async () => {
         await axios.post('/api/devices/scan');
         setScanState(prev => ({ ...prev, isScanning: true })); // Optimistic update
+    };
+
+    const handleExport = () => {
+        window.open('/api/export', '_blank');
+    };
+
+    const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            const text = event.target?.result as string;
+            if (!text) return;
+            try {
+                const res = await axios.post('/api/import', { csv: text });
+                alert(`Imported: ${res.data.success} devices (Failed: ${res.data.failed})`);
+                fetchDevices();
+            } catch (err) {
+                alert('Failed to import CSV');
+                console.error(err);
+            }
+        };
+        reader.readAsText(file);
     };
 
     const getIcon = (type: string, vendor: string = '', customIcon?: string) => {
@@ -170,6 +195,7 @@ function App() {
         if (t.includes('tv') || t.includes('television') || v.includes('bravia') || v.includes('lg webos')) return <Tv size={20} />;
         if (t.includes('printer') || v.includes('epson') || v.includes('hp') || v.includes('canon')) return <Printer size={20} />;
         if (t.includes('watch') || v.includes('apple watch')) return <Watch size={20} />;
+        if (t === 'vm') return <Box size={20} />;
 
         return <Circle size={20} className="opacity-50" />;
     };
@@ -216,6 +242,22 @@ function App() {
         }));
     };
 
+    // Column State
+    const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set(['type', 'status', 'name', 'ip', 'mac', 'vendor', 'os', 'lastSeen']));
+    const [isColumnMenuOpen, setIsColumnMenuOpen] = useState(false);
+
+    const toggleColumn = (key: string) => {
+        const newSet = new Set(visibleColumns);
+        if (newSet.has(key)) newSet.delete(key);
+        else newSet.add(key);
+        setVisibleColumns(newSet);
+    };
+
+    // Calculate unique values for autocomplete
+    const uniqueVendors = React.useMemo(() => Array.from(new Set(devices.map(d => d.customVendor || d.vendor).filter(Boolean))) as string[], [devices]);
+    const uniqueTypes = React.useMemo(() => Array.from(new Set(devices.map(d => d.customType || d.type).filter(Boolean))) as string[], [devices]);
+    const uniqueOS = React.useMemo(() => Array.from(new Set(devices.map(d => d.customOS || d.os).filter(Boolean))) as string[], [devices]);
+
     return (
         <div className="h-screen w-full bg-background text-foreground flex flex-col md:flex-row font-sans overflow-hidden">
             <div className="flex-1 flex flex-col min-w-0 h-full p-6 md:p-8 gap-6">
@@ -248,27 +290,101 @@ function App() {
                             </nav>
                         </div>
 
-                        <div className="flex gap-2">
+                        <div className="flex items-center gap-2">
                             {view === 'scanner' && (
-                                <button onClick={triggerScan} className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:opacity-90 transition-opacity font-medium text-sm">
-                                    <Play size={16} /> Scan Network
-                                </button>
+                                <>
+                                    <button
+                                        onClick={triggerScan}
+                                        className="flex items-center gap-2 bg-primary text-primary-foreground px-4 h-9 rounded-md hover:opacity-90 transition-opacity font-medium text-sm shadow-sm"
+                                    >
+                                        <Play size={16} /> <span className="hidden sm:inline">Scan</span>
+                                    </button>
+
+                                    <div className="w-px h-6 bg-border mx-1" />
+
+                                    <div className="relative">
+                                        <button
+                                            onClick={() => setIsColumnMenuOpen(!isColumnMenuOpen)}
+                                            className={`w-9 h-9 flex items-center justify-center border rounded-md hover:bg-accent hover:text-accent-foreground transition-colors ${isColumnMenuOpen ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'}`}
+                                            title="Customize Columns"
+                                        >
+                                            <LayoutTemplate size={18} />
+                                        </button>
+
+                                        {isColumnMenuOpen && (
+                                            <>
+                                                <div className="fixed inset-0 z-40" onClick={() => setIsColumnMenuOpen(false)} />
+                                                <div className="absolute right-0 top-full mt-2 w-56 bg-card border rounded-lg shadow-xl z-50 p-2 space-y-1 animate-in fade-in zoom-in-95 duration-100">
+                                                    <div className="text-xs font-semibold text-muted-foreground px-2 py-1.5 mb-1 uppercase tracking-wider">Visible Columns</div>
+                                                    {[
+                                                        { key: 'type', label: 'Type' },
+                                                        { key: 'status', label: 'Status' },
+                                                        { key: 'name', label: 'Name' },
+                                                        { key: 'ip', label: 'IP Address' },
+                                                        { key: 'os', label: 'OS / Device' },
+                                                        { key: 'mac', label: 'MAC Address' },
+                                                        { key: 'vendor', label: 'Vendor' },
+                                                        { key: 'lastSeen', label: 'Last Seen' },
+                                                    ].map(col => (
+                                                        <label key={col.key} className="flex items-center gap-3 px-2 py-2 hover:bg-muted rounded-md text-sm cursor-pointer transition-colors">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={visibleColumns.has(col.key)}
+                                                                onChange={() => toggleColumn(col.key)}
+                                                                className="rounded border-input text-primary focus:ring-primary w-4 h-4"
+                                                            />
+                                                            {col.label}
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+
+                                    <button
+                                        onClick={handleExport}
+                                        className="w-9 h-9 flex items-center justify-center border rounded-md hover:bg-accent hover:text-accent-foreground transition-colors text-muted-foreground"
+                                        title="Export CSV"
+                                    >
+                                        <Download size={18} />
+                                    </button>
+
+                                    <label
+                                        className="w-9 h-9 flex items-center justify-center border rounded-md hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer text-muted-foreground"
+                                        title="Import CSV"
+                                    >
+                                        <Upload size={18} />
+                                        <input type="file" accept=".csv" className="hidden" onChange={handleImport} />
+                                    </label>
+                                </>
                             )}
+
                             {view === 'speedtest' && (
                                 <button
                                     onClick={runSpeedTest}
                                     disabled={isSpeedTesting}
-                                    className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:opacity-90 transition-opacity font-medium text-sm disabled:opacity-50"
+                                    className="flex items-center gap-2 bg-primary text-primary-foreground px-4 h-9 rounded-md hover:opacity-90 transition-opacity font-medium text-sm disabled:opacity-50 shadow-sm"
                                 >
                                     {isSpeedTesting ? <span className="animate-spin">⟳</span> : <Play size={16} />}
-                                    {isSpeedTesting ? 'Testing...' : 'Run Speed Test'}
+                                    {isSpeedTesting ? 'Testing...' : 'Run Test'}
                                 </button>
                             )}
-                            <button onClick={() => setDarkMode(!darkMode)} className="p-2 border rounded-md hover:bg-accent transition-colors">
-                                {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+
+                            <div className="w-px h-6 bg-border mx-1" />
+
+                            <button
+                                onClick={() => setDarkMode(!darkMode)}
+                                className="w-9 h-9 flex items-center justify-center border rounded-md hover:bg-accent hover:text-accent-foreground transition-colors text-muted-foreground"
+                                title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+                            >
+                                {darkMode ? <Sun size={18} /> : <Moon size={18} />}
                             </button>
-                            <button onClick={() => setIsSettingsOpen(true)} className="p-2 border rounded-md hover:bg-accent transition-colors">
-                                <SettingsIcon size={20} />
+                            <button
+                                onClick={() => setIsSettingsOpen(true)}
+                                className="w-9 h-9 flex items-center justify-center border rounded-md hover:bg-accent hover:text-accent-foreground transition-colors text-muted-foreground"
+                                title="Settings"
+                            >
+                                <SettingsIcon size={18} />
                             </button>
                         </div>
                     </div>
@@ -339,13 +455,14 @@ function App() {
                             <table className="w-full text-left text-sm">
                                 <thead className="sticky top-0 z-10 bg-muted/90 backdrop-blur supports-[backdrop-filter]:bg-muted/60 border-b shadow-sm">
                                     <tr>
-                                        <th className="p-4 font-medium w-16">Type</th>
-                                        <th className="p-4 font-medium w-24 cursor-pointer hover:text-foreground" onClick={() => handleSort('status')}>Status <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>
-                                        <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('name')}>Name <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>
-                                        <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('ip')}>IP Address <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>
-                                        <th className="p-4 font-medium">MAC Address</th>
-                                        <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('vendor')}>Vendor <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>
-                                        <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('lastSeen')}>Last Seen <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>
+                                        {visibleColumns.has('type') && <th className="p-4 font-medium w-16">Type</th>}
+                                        {visibleColumns.has('status') && <th className="p-4 font-medium w-24 cursor-pointer hover:text-foreground" onClick={() => handleSort('status')}>Status <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>}
+                                        {visibleColumns.has('name') && <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('name')}>Name <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>}
+                                        {visibleColumns.has('ip') && <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('ip')}>IP Address <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>}
+                                        {visibleColumns.has('os') && <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('os')}>OS / Device <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>}
+                                        {visibleColumns.has('mac') && <th className="p-4 font-medium">MAC Address</th>}
+                                        {visibleColumns.has('vendor') && <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('vendor')}>Vendor <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>}
+                                        {visibleColumns.has('lastSeen') && <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('lastSeen')}>Last Seen <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
@@ -361,32 +478,37 @@ function App() {
                                                     ${isNew ? 'shadow-[inset_0_0_20px_rgba(45,212,191,0.15)] bg-teal-500/5' : ''}
                                                 `}
                                             >
-                                                <td className="p-4 text-muted-foreground w-16">
-                                                    <div className="relative">
-                                                        {getIcon(device.type, device.vendor, device.customIcon)}
-                                                        {isNew && <span className="absolute -top-1 -right-1 w-2 h-2 bg-teal-400 rounded-full animate-pulse shadow-lg shadow-teal-400" />}
-                                                    </div>
-                                                </td>
-                                                <td className="p-4">
-                                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${device.status === 'online'
-                                                        ? 'bg-green-500/10 text-green-600 border-green-500/20'
-                                                        : 'bg-muted text-muted-foreground border-border'
-                                                        }`}>
-                                                        <span className={`w-1.5 h-1.5 rounded-full ${device.status === 'online' ? 'bg-green-500' : 'bg-gray-400'}`} />
-                                                        {device.status}
-                                                    </span>
-                                                </td>
-                                                <td className="p-4 font-medium text-foreground">{device.customName || device.name || 'Unknown'}</td>
-                                                <td className="p-4 font-mono text-muted-foreground">{device.ip}</td>
-                                                <td className="p-4 font-mono text-xs text-muted-foreground">{device.mac}</td>
-                                                <td className="p-4 text-muted-foreground">{device.vendor || '-'}</td>
-                                                <td className="p-4 text-muted-foreground whitespace-nowrap text-xs">{format(new Date(device.lastSeen), 'MMM d, HH:mm')}</td>
+                                                {visibleColumns.has('type') && (
+                                                    <td className="p-4 text-muted-foreground w-16">
+                                                        <div className="relative">
+                                                            {getIcon(device.customType || device.type, device.customVendor || device.vendor, device.customIcon)}
+                                                            {isNew && <span className="absolute -top-1 -right-1 w-2 h-2 bg-teal-400 rounded-full animate-pulse shadow-lg shadow-teal-400" />}
+                                                        </div>
+                                                    </td>
+                                                )}
+                                                {visibleColumns.has('status') && (
+                                                    <td className="p-4">
+                                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${device.status === 'online'
+                                                            ? 'bg-green-500/10 text-green-600 border-green-500/20'
+                                                            : 'bg-muted text-muted-foreground border-border'
+                                                            }`}>
+                                                            <span className={`w-1.5 h-1.5 rounded-full ${device.status === 'online' ? 'bg-green-500' : 'bg-gray-400'}`} />
+                                                            {device.status}
+                                                        </span>
+                                                    </td>
+                                                )}
+                                                {visibleColumns.has('name') && <td className="p-4 font-medium text-foreground">{device.customName || device.name || 'Unknown'}</td>}
+                                                {visibleColumns.has('ip') && <td className="p-4 font-mono text-muted-foreground">{device.ip}</td>}
+                                                {visibleColumns.has('os') && <td className="p-4 text-sm text-muted-foreground">{device.customOS || device.os || '-'}</td>}
+                                                {visibleColumns.has('mac') && <td className="p-4 font-mono text-xs text-muted-foreground">{device.mac}</td>}
+                                                {visibleColumns.has('vendor') && <td className="p-4 text-muted-foreground">{device.customVendor || device.vendor || '-'}</td>}
+                                                {visibleColumns.has('lastSeen') && <td className="p-4 text-muted-foreground whitespace-nowrap text-xs">{format(new Date(device.lastSeen), 'MMM d, HH:mm')}</td>}
                                             </tr>
                                         );
                                     })}
                                     {filteredDevices.length === 0 && (
                                         <tr>
-                                            <td colSpan={7} className="p-12 text-center text-muted-foreground">
+                                            <td colSpan={visibleColumns.size} className="p-12 text-center text-muted-foreground">
                                                 No devices found.
                                             </td>
                                         </tr>
@@ -412,9 +534,17 @@ function App() {
                     device={selectedDevice}
                     onClose={() => setSelectedDevice(null)}
                     onUpdate={(updated) => {
-                        setDevices(prev => prev.map(d => d.id === updated.id ? updated : d));
-                        setSelectedDevice(updated);
+                        if ((updated as any).deleted) {
+                            setDevices(prev => prev.filter(d => d.id !== updated.id));
+                            setSelectedDevice(null);
+                        } else {
+                            setDevices(prev => prev.map(d => d.id === updated.id ? updated : d));
+                            setSelectedDevice(updated);
+                        }
                     }}
+                    uniqueVendors={uniqueVendors}
+                    uniqueTypes={uniqueTypes}
+                    uniqueOS={uniqueOS}
                 />
             )}
 

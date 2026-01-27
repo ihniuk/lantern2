@@ -6,6 +6,9 @@ export interface Device {
     customName?: string;
     vendor?: string;
     customIcon?: string;
+    customVendor?: string;
+    customType?: string;
+    customOS?: string;
     type: string;
     status: string;
     lastSeen: string;
@@ -16,6 +19,7 @@ export interface Device {
     latency?: number;
     jitter?: number;
     history?: DeviceHistory[];
+    tags?: string[];
 }
 
 export interface DeviceHistory {
