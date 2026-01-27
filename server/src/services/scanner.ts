@@ -3,6 +3,7 @@ import nmap from 'node-nmap';
 import { exec } from 'child_process';
 import util from 'util';
 import os from 'os';
+import { sendNotification } from './notifications';
 
 const execPromise = util.promisify(exec);
 
@@ -351,14 +352,15 @@ export async function runScan() {
                         }
                     });
 
-                    if (existing.status === 'offline') {
-                        await prisma.event.create({
-                            data: {
-                                type: 'online',
-                                message: `Device ${existing.name || host.ip} coming online`,
-                                deviceId: existing.id
-                            }
-                        });
+                    // Logic for Online Notification
+                    if (settings?.notifyOnline || (existing.tags && existing.tags.includes('notify-online'))) {
+                        if (existing.status === 'offline') {
+                            sendNotification({
+                                title: 'Device Online',
+                                body: `${existing.name} is back online.`,
+                                icon: '/pwa-192x192.png'
+                            });
+                        }
                     }
                 } else {
                     newDevicesCount++;
@@ -379,6 +381,15 @@ export async function runScan() {
                             deviceId: newDevice.id
                         }
                     });
+
+                    const settings = await prisma.settings.findUnique({ where: { id: 'default' } });
+                    if (settings?.notifyNewDevice) {
+                        sendNotification({
+                            title: 'New Device Discovered',
+                            body: `${newDevice.name} (${newDevice.ip}) joined the network.`,
+                            icon: '/pwa-192x192.png'
+                        });
+                    }
 
                     // Trigger deep scan for new device
                     log(`Queuing deep scan for new device: ${newDevice.ip}`);
@@ -430,6 +441,15 @@ export async function runScan() {
                                 deviceId: device.id
                             }
                         });
+
+                        const settings = await prisma.settings.findUnique({ where: { id: 'default' } });
+                        if (settings?.notifyOffline || (device.tags && device.tags.includes('notify-offline'))) {
+                            sendNotification({
+                                title: 'Device Offline',
+                                body: `${device.name} is now offline.`,
+                                icon: '/pwa-192x192.png'
+                            });
+                        }
                     }
                 }
             }

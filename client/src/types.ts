@@ -43,6 +43,11 @@ export interface Settings {
     dnsServer: string;
     lastScan?: string;
     speedTestIntervalMinutes?: number;
+    notifyNewDevice?: boolean;
+    notifySpeedDrop?: boolean;
+    notifyOnline?: boolean;
+    notifyOffline?: boolean;
+    lastScan?: string;
 }
 
 export interface SpeedTestResult {

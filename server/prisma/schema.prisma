@@ -73,6 +73,19 @@ model Settings {
   dnsServer    String? 
   lastScan     DateTime?
   speedTestIntervalMinutes Int @default(60)
+  
+  // Notification Settings
+  notifyNewDevice Boolean @default(true)
+  notifySpeedDrop Boolean @default(true)
+  notifyOnline    Boolean @default(false)
+  notifyOffline   Boolean @default(false)
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  endpoint  String   @unique
+  keys      String   // JSON string { p256dh, auth }
+  createdAt DateTime @default(now())
 }
 
 model SpeedTestResult {

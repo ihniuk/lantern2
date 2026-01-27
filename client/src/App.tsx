@@ -7,13 +7,14 @@ import { Device, Settings, SpeedTestResult } from './types';
 import { IconMap } from './iconMap';
 import { DeviceDrawer } from './components/DeviceDrawer';
 import { SpeedTestDashboard } from './components/SpeedTestDashboard';
+import { subscribeUserToPush } from './pushService';
 
 function App() {
     const [devices, setDevices] = useState<Device[]>([]);
     const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [settings, setSettings] = useState<Settings>({ scanInterval: 5, scanDuration: 60, ipRange: '', dnsServer: '8.8.8.8', speedTestIntervalMinutes: 60 });
-    const [settingsTab, setSettingsTab] = useState<'scanner' | 'speedtest'>('scanner');
+    const [settingsTab, setSettingsTab] = useState<'scanner' | 'speedtest' | 'notifications'>('scanner');
 
     // View State
     const [view, setView] = useState<'scanner' | 'speedtest'>('scanner');
@@ -570,9 +571,56 @@ function App() {
                             >
                                 Speed Monitor
                             </button>
+                            <button
+                                className={`flex-1 pb-2 text-sm font-medium transition-colors ${settingsTab === 'notifications' ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                                onClick={() => setSettingsTab('notifications')}
+                            >
+                                Notifications
+                            </button>
                         </div>
 
                         <div className="space-y-4">
+                            {settingsTab === 'notifications' && (
+                                <div className="space-y-4">
+                                    <div className="p-4 bg-muted/50 rounded-lg">
+                                        <h3 className="font-semibold text-sm mb-2">Push Notifications</h3>
+                                        <p className="text-xs text-muted-foreground mb-4">Enable notifications to receive alerts on this device.</p>
+                                        <button
+                                            onClick={async () => {
+                                                const success = await subscribeUserToPush();
+                                                if (success) alert("Subscribed to notifications!");
+                                            }}
+                                            className="w-full bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm hover:bg-primary/90 transition-colors"
+                                        >
+                                            Enable Notifications
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-3 pt-2">
+                                        <h3 className="font-semibold text-sm">Alert Rules</h3>
+
+                                        <label className="flex items-center justify-between text-sm p-2 border rounded hover:bg-accent/50 cursor-pointer">
+                                            <span>Notify on New Device</span>
+                                            <input
+                                                type="checkbox"
+                                                checked={settings.notifyNewDevice !== false}
+                                                onChange={e => setSettings({ ...settings, notifyNewDevice: e.target.checked })}
+                                                className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                                            />
+                                        </label>
+
+                                        <label className="flex items-center justify-between text-sm p-2 border rounded hover:bg-accent/50 cursor-pointer">
+                                            <span>Notify on Speed Drop (>20%)</span>
+                                            <input
+                                                type="checkbox"
+                                                checked={settings.notifySpeedDrop !== false}
+                                                onChange={e => setSettings({ ...settings, notifySpeedDrop: e.target.checked })}
+                                                className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                                            />
+                                        </label>
+                                    </div>
+                                </div>
+                            )}
                             {settingsTab === 'scanner' ? (
                                 <>
                                     <div>
