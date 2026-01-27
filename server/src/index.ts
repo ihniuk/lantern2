@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import deviceRoutes from './routes/deviceRoutes';
 import speedTestRoutes from './routes/speedTestRoutes';
+import notificationRoutes from './routes/notificationRoutes';
 import { runScan } from './services/scanner';
 import { initSpeedTestScheduler } from './services/speedTestService';
 import prisma from './prisma';
@@ -17,6 +18,7 @@ app.use(express.json());
 
 app.use('/api/devices', deviceRoutes);
 app.use('/api/speedtest', speedTestRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date() });

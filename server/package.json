@@ -18,7 +18,8 @@
         "ping": "^0.4.4",
         "node-cron": "^3.0.3",
         "multicast-dns": "^7.2.5",
-        "node-ssdp": "^4.0.1"
+        "node-ssdp": "^4.0.1",
+        "web-push": "^3.6.7"
     },
     "devDependencies": {
         "typescript": "^5.7.3",
@@ -30,6 +31,7 @@
         "prisma": "^6.2.1",
         "@types/node-cron": "^3.0.11",
         "@types/multicast-dns": "^7.2.0",
-        "@types/node-ssdp": "^4.0.0"
+        "@types/node-ssdp": "^4.0.0",
+        "@types/web-push": "^3.6.3"
     }
 }

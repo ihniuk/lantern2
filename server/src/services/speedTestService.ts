@@ -48,6 +48,40 @@ export const runSpeedTest = async () => {
         });
 
         console.log(`Speed test completed: DL ${saved.download} Mbps / UL ${saved.upload} Mbps`);
+
+        // Check for significant speed drop (>20% below 7-day average)
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        const recentTests = await prisma.speedTestResult.findMany({
+            where: {
+                timestamp: { gte: sevenDaysAgo },
+                id: { not: saved.id } // Exclude current
+            },
+            select: { download: true }
+        });
+
+        if (recentTests.length > 0) {
+            const totalDownload = recentTests.reduce((sum, t) => sum + t.download, 0);
+            const averageDownload = totalDownload / recentTests.length;
+
+            if (saved.download < averageDownload * 0.8) {
+                const dropPercent = Math.round(((averageDownload - saved.download) / averageDownload) * 100);
+
+                // Get settings to check preference (import at top needed or fetch here)
+                const settings = await prisma.settings.findUnique({ where: { id: 'default' } });
+
+                if (settings?.notifySpeedDrop) {
+                    const { sendNotification } = await import('./notifications'); // Dynamic import to avoid cycles or top-level dependency issues
+                    sendNotification({
+                        title: 'Internet Speed Drop',
+                        body: `Download speed dropped by ${dropPercent}% (${saved.download} Mbps vs avg ${averageDownload.toFixed(1)} Mbps).`,
+                        icon: '/pwa-192x192.png'
+                    });
+                }
+            }
+        }
+
         return saved;
 
     } catch (error) {
