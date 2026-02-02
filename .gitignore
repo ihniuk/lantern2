@@ -1,5 +1,6 @@
 data/lantern.db
 server/data/*.db
+data/notifications.json
 *.db
 node_modules
 dist
