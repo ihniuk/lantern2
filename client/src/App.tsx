@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Laptop, Server, Smartphone, Router, Shield, Radio, Tv, Circle, Settings as SettingsIcon, X, Moon, Sun, Search, Printer, Watch, ArrowUpDown, Play, Filter, Box, LayoutTemplate, Download, Upload } from 'lucide-react';
+import { Laptop, Server, Smartphone, Router, Shield, Radio, Tv, Circle, Settings as SettingsIcon, X, Moon, Sun, Search, Printer, Watch, ArrowUpDown, Play, Filter, Box, LayoutTemplate, Download, Upload, Bell, Check, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 
 import { Device, Settings, SpeedTestResult } from './types';
 import { IconMap } from './iconMap';
 import { DeviceDrawer } from './components/DeviceDrawer';
 import { SpeedTestDashboard } from './components/SpeedTestDashboard';
-import { subscribeUserToPush } from './pushService';
+import { useNotifications } from './context/NotificationContext';
 
 function App() {
     const [devices, setDevices] = useState<Device[]>([]);
@@ -15,6 +15,9 @@ function App() {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [settings, setSettings] = useState<Settings>({ scanInterval: 5, scanDuration: 60, ipRange: '', dnsServer: '8.8.8.8', speedTestIntervalMinutes: 60 });
     const [settingsTab, setSettingsTab] = useState<'scanner' | 'speedtest' | 'notifications'>('scanner');
+
+    // Notifications
+    const { notifications, unreadCount, markAsRead, clearNotifications, deleteNotification, isOpen: isNotificationsOpen, setIsOpen: setIsNotificationsOpen } = useNotifications();
 
     // View State
     const [view, setView] = useState<'scanner' | 'speedtest'>('scanner');
@@ -268,6 +271,18 @@ function App() {
                     <div className="flex justify-between items-center">
                         <div className="flex items-center gap-6">
                             <div className="flex items-center gap-3">
+                                {/* Bell Icon */}
+                                <button
+                                    onClick={() => setIsNotificationsOpen(prev => !prev)}
+                                    className="relative p-2 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors mr-2"
+                                    title="Notifications"
+                                >
+                                    <Bell size={20} />
+                                    {unreadCount > 0 && (
+                                        <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse ring-2 ring-background" />
+                                    )}
+                                </button>
+
                                 <div className="bg-primary text-primary-foreground p-2 rounded-lg shadow-lg shadow-primary/20">
                                     <Radio size={24} />
                                 </div>
@@ -529,6 +544,88 @@ function App() {
                 </div>
             </div>
 
+            {/* Notification Drawer */}
+            {isNotificationsOpen && (
+                <>
+                    <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px]" onClick={() => setIsNotificationsOpen(false)} />
+                    <div className="fixed left-0 top-0 bottom-0 w-80 bg-background border-r shadow-2xl z-50 transform transition-transform animate-in slide-in-from-left duration-200 flex flex-col">
+                        <div className="p-4 border-b flex justify-between items-center bg-muted/30">
+                            <div className="flex items-center gap-2">
+                                <Bell size={18} className="text-primary" />
+                                <h2 className="font-semibold">Notifications</h2>
+                                {unreadCount > 0 && <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-bold">{unreadCount}</span>}
+                            </div>
+                            <button onClick={() => setIsNotificationsOpen(false)} className="p-1 hover:bg-accent rounded"><X size={18} /></button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                            {notifications.length === 0 ? (
+                                <div className="h-full flex flex-col items-center justify-center text-muted-foreground p-6 text-center">
+                                    <Bell size={48} className="opacity-20 mb-4" />
+                                    <p className="text-sm">No notifications yet.</p>
+                                </div>
+                            ) : (
+                                notifications.map(notification => (
+                                    <div
+                                        key={notification.id}
+                                        className={`p-3 rounded-lg border text-sm relative group transition-all ${!notification.read ? 'bg-accent/30 border-primary/20' : 'bg-card hover:bg-accent/10'}`}
+                                        onClick={() => {
+                                            if (!notification.read) markAsRead(notification.id);
+                                            // Handle click action
+                                            if (notification.type === 'new_device' && notification.metadata?.deviceId) {
+                                                // Find device and select it
+                                                const device = devices.find(d => d.id === notification.metadata.deviceId);
+                                                if (device) {
+                                                    setSelectedDevice(device);
+                                                    setIsNotificationsOpen(false);
+                                                }
+                                            }
+                                        }}
+                                    >
+                                        <div className="flex justify-between items-start gap-2">
+                                            <h4 className={`font-medium ${!notification.read ? 'text-primary' : 'text-foreground'}`}>{notification.title}</h4>
+                                            <div className="flex items-center gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                                                {!notification.read && (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); markAsRead(notification.id); }}
+                                                        title="Mark as read"
+                                                        className="p-1 hover:bg-background rounded text-primary"
+                                                    >
+                                                        <Check size={14} />
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); deleteNotification(notification.id); }}
+                                                    title="Delete"
+                                                    className="p-1 hover:bg-red-100 hover:text-red-600 rounded text-muted-foreground"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <p className="text-muted-foreground mt-1 text-xs leading-relaxed">{notification.message}</p>
+                                        <div className="text-[10px] text-muted-foreground mt-2 opacity-70">
+                                            {format(new Date(notification.timestamp), 'MMM d, HH:mm')}
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+
+                        {notifications.length > 0 && (
+                            <div className="p-3 border-t bg-muted/30">
+                                <button
+                                    onClick={clearNotifications}
+                                    className="w-full py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <Trash2 size={14} /> Clear All Notifications
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </>
+            )}
+
             {/* Detail View Drawer */}
             {selectedDevice && (
                 <DeviceDrawer
@@ -582,19 +679,7 @@ function App() {
                         <div className="space-y-4">
                             {settingsTab === 'notifications' && (
                                 <div className="space-y-4">
-                                    <div className="p-4 bg-muted/50 rounded-lg">
-                                        <h3 className="font-semibold text-sm mb-2">Push Notifications</h3>
-                                        <p className="text-xs text-muted-foreground mb-4">Enable notifications to receive alerts on this device.</p>
-                                        <button
-                                            onClick={async () => {
-                                                const success = await subscribeUserToPush();
-                                                if (success) alert("Subscribed to notifications!");
-                                            }}
-                                            className="w-full bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm hover:bg-primary/90 transition-colors"
-                                        >
-                                            Enable Notifications
-                                        </button>
-                                    </div>
+
 
                                     <div className="space-y-3 pt-2">
                                         <h3 className="font-semibold text-sm">Alert Rules</h3>
@@ -610,7 +695,7 @@ function App() {
                                         </label>
 
                                         <label className="flex items-center justify-between text-sm p-2 border rounded hover:bg-accent/50 cursor-pointer">
-                                            <span>Notify on Speed Drop (>20%)</span>
+                                            <span>Notify on Speed Drop (&gt;20%)</span>
                                             <input
                                                 type="checkbox"
                                                 checked={settings.notifySpeedDrop !== false}
@@ -619,6 +704,7 @@ function App() {
                                             />
                                         </label>
                                     </div>
+
                                 </div>
                             )}
                             {settingsTab === 'scanner' ? (
@@ -685,9 +771,10 @@ function App() {
                             </button>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                </div >
+            )
+            }
+        </div >
     );
 }
 

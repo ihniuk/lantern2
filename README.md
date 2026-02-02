@@ -2,43 +2,51 @@
 
 Lantern II is a powerful, containerised network scanning and monitoring application. It discovers devices on your local subnet, tracks their uptime status, monitors your internet connection quality, and provides detailed insights via a sleek, modern React interface.
 
+## 🚀 Key Features
 
-## 🚀 Features
-
+### 📡 Network Scanning
 *   **Host Discovery**: Automatically scans your configured subnet (e.g., `192.168.1.0/24`) to find connected devices.
 *   **Real-time Status**: Tracks device online/offline status with an event timeline and uptime history graph.
-*   **Internet Speed Monitor**:
-    *   **Automated Testing**: Configurable background speed tests (via Ookla).
-    *   **Performance Analytics**: Visualize Download, Upload, and Ping trends over 24h.
-    *   **Historical Data**: Track ISP reliability and average speeds over time.
-    *   **Next Run Indicator**: Know exactly when the next test is scheduled.
-*   **Deep Scanning**:
+*   **Smart Recognition**:
     *   **Port Scanning**: Checks for common open ports.
-    *   **OS Detection**: Attempts to identify the operating system of discovered devices.
-    *   **MAC Address Vendor Lookup**: Identifies device manufacturers.
-*   **Modern UI**:
-    *   **Dark Mode**: Sleek Anthracite theme with a toggle.
-    *   **Sort & Search**: Filter devices by Name, IP, Vendor, or MAC Address.
-    *   **Interactive Table**: Sortable columns and detailed device drawers.
-    *   **Live Terminal**: Watch scan logs in real-time.
-*   **Management**:
-    *   Trigger manual scans or speed tests.
-    *   Wake-on-LAN (WOL) support.
-    *   Configurable scan and speed test intervals.
+    *   **OS Detection**: Attempts to identify the operating system.
+    *   **MAC Vendor Lookup**: Automatically identifies device manufacturers.
+*   **Device Customization**:
+    *   **Edit Details**: Manually override Name, Vendor, Type, and Icon for any device.
+    *   **Data Persistence**: Custom details are saved and remembered.
+
+### 🔔 Notification Center
+*   **In-App Alerts**: A dedicated notification drawer (Bell Icon) tracks important network events.
+*   **Smart Grouping**: "First Scan" results are grouped to avoid notification spam.
+*   **Event Types**:
+    *   **New Device**: Instant alert when a new device joins the network.
+    *   **IP Change**: Notifies you if a known device changes its IP address.
+    *   **Speed Drop**: Alerts if internet speed drops >20% below your 7-day average.
+    *   **Device Status**: (Optional) track Online/Offline status for specific critical devices.
+
+### ⚡ Internet Speed Monitor
+*   **Automated Testing**: Configurable background speed tests (via Ookla).
+*   **Performance Analytics**: Visualize Download, Upload, and Ping trends over 24h.
+*   **Historical Data**: Track ISP reliability and average speeds over time.
+*   **Next Run Indicator**: Know exactly when the next test is scheduled.
+
+### 💾 Data Management
+*   **CSV Export/Import**: Backup your device list or migrate data between instances.
+*   **Auto-Backups**: Daily JSON backups of your device database.
 
 ## 🛠️ Technology Stack
 
 *   **Frontend**: React, Vite, TailwindCSS, Recharts, Lucide Icons.
 *   **Backend**: Node.js, Express, Prisma ORM.
 *   **Database**: SQLite (persisted locally).
-*   **Infrastructure**: Docker, Nginx, Nmap.
+*   **Infrastructure**: Docker, Nmap.
 
 ## 🐳 Quick Start
 
 ### Prerequisites
 
 *   Docker & Docker Compose installed on your machine.
-*   *Note*: For best results (especially ARP scanning), run on a Linux host. Windows/Mac Docker Desktop may have limitations with network discovery due to virtualization.
+*   *Note*: For best results (especially ARP scanning), run on a Linux host with `network_mode: host`.
 
 ### Installation
 
@@ -60,10 +68,9 @@ Lantern II is a powerful, containerised network scanning and monitoring applicat
 
 Click the **Settings** (gear icon) in the UI to configure:
 
-*   **IP Range**: The CIDR range to scan (Default: `192.168.1.0/24`). *Ensure this matches your local network.*
-*   **Speed Test Interval**: Frequency of automatic background speed tests (Default: `15` minutes).
-*   **DNS Server**: The DNS server to use for your network (Default: `8.8.8.8`).
-*   **Scan Interval**: Frequency of automatic background scans (Default: `15` minutes).
+*   **Scanner**: Set IP Range (CIDR), Scan Interval, and DNS Server.
+*   **Speed Monitor**: Set Test Interval (default 60 mins).
+*   **Notifications**: Toggle global alerts for New Devices and Speed Drops.
 
 ## 📂 Project Structure
 
@@ -73,6 +80,8 @@ Click the **Settings** (gear icon) in the UI to configure:
 │   └── Dockerfile
 ├── server/         # Node.js Backend
 │   ├── src/
+│   │   ├── services/  # Core Logic (Scanner, SpeedTest, Notifications)
+│   │   └── routes/    # API Endpoints
 │   ├── prisma/     # Database Schema
 │   └── Dockerfile
 ├── docker-compose.yml
@@ -85,7 +94,7 @@ Click the **Settings** (gear icon) in the UI to configure:
     *   Verify the **IP Range** in settings matches your specific subnet.
     *   Check if Docker has network access. On Linux, the container uses `network_mode: host`.
 *   **Database Issues**:
-    *   Data is saved to `./data/dev.db`. If you need to reset, stop the container and delete this file (or use "Clear Data" in Settings).
+    *   Data is saved to `./data/dev.db`. Use "Clear Data" in Settings to reset.
 
 ## 📄 License
 

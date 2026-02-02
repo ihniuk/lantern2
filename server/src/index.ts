@@ -20,8 +20,18 @@ app.use('/api/devices', deviceRoutes);
 app.use('/api/speedtest', speedTestRoutes);
 app.use('/api/notifications', notificationRoutes);
 
+const CONTAINER_START_TIME = new Date();
+
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date() });
+});
+
+app.get('/api/status', (req, res) => {
+    res.json({
+        online: true,
+        startTime: CONTAINER_START_TIME,
+        uptime: (new Date().getTime() - CONTAINER_START_TIME.getTime()) / 1000
+    });
 });
 
 // Settings Route

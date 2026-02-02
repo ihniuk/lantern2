@@ -72,11 +72,11 @@ export const runSpeedTest = async () => {
                 const settings = await prisma.settings.findUnique({ where: { id: 'default' } });
 
                 if (settings?.notifySpeedDrop) {
-                    const { sendNotification } = await import('./notifications'); // Dynamic import to avoid cycles or top-level dependency issues
-                    sendNotification({
+                    const { notificationService } = await import('./notificationService');
+                    notificationService.add({
+                        type: 'speed_drop',
                         title: 'Internet Speed Drop',
-                        body: `Download speed dropped by ${dropPercent}% (${saved.download} Mbps vs avg ${averageDownload.toFixed(1)} Mbps).`,
-                        icon: '/pwa-192x192.png'
+                        message: `Download speed dropped by ${dropPercent}% (${saved.download} Mbps vs avg ${averageDownload.toFixed(1)} Mbps).`
                     });
                 }
             }

@@ -47,7 +47,7 @@ export interface Settings {
     notifySpeedDrop?: boolean;
     notifyOnline?: boolean;
     notifyOffline?: boolean;
-    lastScan?: string;
+
 }
 
 export interface SpeedTestResult {
