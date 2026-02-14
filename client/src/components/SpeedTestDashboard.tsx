@@ -7,9 +7,11 @@ interface SpeedTestDashboardProps {
     history: SpeedTestResult[];
     stats: any;
     settings: Settings;
+    range: '24h' | '7d' | '14d' | '30d';
+    onRangeChange: (range: '24h' | '7d' | '14d' | '30d') => void;
 }
 
-export function SpeedTestDashboard({ history, stats, settings }: SpeedTestDashboardProps) {
+export function SpeedTestDashboard({ history, stats, settings, range, onRangeChange }: SpeedTestDashboardProps) {
 
     // Calculate median for last 24h if we want reference lines on the graph
     const calcMedian = (values: number[]) => {
@@ -24,7 +26,7 @@ export function SpeedTestDashboard({ history, stats, settings }: SpeedTestDashbo
 
     // Prepare data (reversed for chart if history is new-first)
     const graphData = history ? [...history].reverse().map(h => ({
-        time: format(new Date(h.timestamp), 'HH:mm'),
+        time: format(new Date(h.timestamp), range === '24h' ? 'HH:mm' : 'MMM d HH:mm'),
         download: h.download,
         upload: h.upload,
         original: h
@@ -45,11 +47,28 @@ export function SpeedTestDashboard({ history, stats, settings }: SpeedTestDashbo
     return (
         <div className="flex flex-col gap-6 p-1">
             {/* Header & Actions */}
-            <div>
-                <h2 className="text-2xl font-bold tracking-tight">Internet Speed Monitor</h2>
-                <div className="text-sm text-muted-foreground mt-1">
-                    24-hour Performance & Historical Analysis
-                    {nextRunText}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h2 className="text-2xl font-bold tracking-tight">Internet Speed Monitor</h2>
+                    <div className="text-sm text-muted-foreground mt-1">
+                        Performance & Historical Analysis
+                        {nextRunText}
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-2 bg-muted/50 p-1 rounded-lg self-start md:self-auto">
+                    {(['24h', '7d', '14d', '30d'] as const).map((r) => (
+                        <button
+                            key={r}
+                            onClick={() => onRangeChange(r)}
+                            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${range === r
+                                    ? 'bg-background text-foreground shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                                }`}
+                        >
+                            {r.toUpperCase()}
+                        </button>
+                    ))}
                 </div>
             </div>
 
@@ -65,12 +84,12 @@ export function SpeedTestDashboard({ history, stats, settings }: SpeedTestDashbo
 
             {/* Main Graph - Fixed Height to prevent overflow issues */}
             <div className="h-[400px] w-full bg-card border rounded-lg p-4 shadow-sm flex flex-col">
-                <h3 className="text-sm font-medium text-muted-foreground mb-4">Speed History (Last 24 Tests) & Median Trend</h3>
+                <h3 className="text-sm font-medium text-muted-foreground mb-4">Speed History ({range === '24h' ? 'Last 24 Hours' : `Last ${range.replace('d', ' Days')}`}) & Median Trend</h3>
                 <div className="flex-1 w-full min-h-0">
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={graphData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                            <XAxis dataKey="time" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} />
+                            <XAxis dataKey="time" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} minTickGap={30} />
                             <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} />
                             <Tooltip
                                 contentStyle={{ backgroundColor: 'hsl(var(--popover))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}

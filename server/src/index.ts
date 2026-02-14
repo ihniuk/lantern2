@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import deviceRoutes from './routes/deviceRoutes';
 import speedTestRoutes from './routes/speedTestRoutes';
+import securityRoutes from './routes/securityRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import { runScan } from './services/scanner';
 import { initSpeedTestScheduler } from './services/speedTestService';
@@ -19,6 +20,7 @@ app.use(express.json());
 app.use('/api/devices', deviceRoutes);
 app.use('/api/speedtest', speedTestRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/security', securityRoutes);
 
 const CONTAINER_START_TIME = new Date();
 

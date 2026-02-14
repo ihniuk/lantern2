@@ -17,10 +17,20 @@ router.post('/run', async (req, res) => {
 // Get history
 router.get('/history', async (req, res) => {
     try {
-        const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
+        const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+        const days = req.query.days ? parseInt(req.query.days as string) : undefined;
+
+        const whereClause: any = {};
+        if (days) {
+            const since = new Date();
+            since.setDate(since.getDate() - days);
+            whereClause.timestamp = { gte: since };
+        }
+
         const history = await prisma.speedTestResult.findMany({
+            where: whereClause,
             orderBy: { timestamp: 'desc' },
-            take: limit
+            take: limit // Optional if days is set, but can still apply
         });
         res.json(history);
     } catch (e: any) {

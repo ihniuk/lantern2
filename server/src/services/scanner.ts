@@ -291,9 +291,13 @@ export async function runScan() {
 
                 let finalName = host.hostname;
 
+                let mdnsName = null;
+                let netbiosName = null;
+
                 // mDNS High Priority
                 if (mdnsMap.has(host.ip)) {
-                    finalName = mdnsMap.get(host.ip);
+                    mdnsName = mdnsMap.get(host.ip);
+                    finalName = mdnsName;
                 }
                 // SSDP Fallback (often has better Model Names like "Sonos")
                 else if (ssdpMap.has(host.ip)) {
@@ -314,13 +318,18 @@ export async function runScan() {
                 }
 
                 // NetBIOS
-                if (!finalName || finalName === host.ip || finalName.startsWith('ip-')) {
-                    const netbios = await getNetbiosName(host.ip);
-                    if (netbios) finalName = netbios;
+                {
+                    const nb = await getNetbiosName(host.ip);
+                    if (nb) {
+                        netbiosName = nb;
+                        if (!finalName || finalName === host.ip || finalName.startsWith('ip-')) {
+                            finalName = nb;
+                        }
+                    }
                 }
 
                 const type = guessType(host.vendor, '');
-                return { ...host, finalName, type };
+                return { ...host, finalName, type, mdnsName, netbiosName };
             }));
 
             // 2. Sequential DB Updates
@@ -352,7 +361,9 @@ export async function runScan() {
                             lastSeen: new Date(),
                             vendor: host.vendor || existing.vendor,
                             name: (existing.name && existing.name !== 'New Device' && existing.name !== existing.ip) ? existing.name : (finalName || existing.name),
-                            type: (existing.type && existing.type !== 'unknown') ? existing.type : type
+                            type: (existing.type && existing.type !== 'unknown') ? existing.type : type,
+                            mdnsName: host.mdnsName || existing.mdnsName,
+                            netbiosName: host.netbiosName || existing.netbiosName
                         }
                     });
 
@@ -365,9 +376,18 @@ export async function runScan() {
                         }
                     });
 
-                    // Logic for Online Notification
-                    if (settings?.notifyOnline || (existing.tags && existing.tags.includes('notify-online'))) {
-                        if (existing.status === 'offline') {
+                    // Logic for Online Notification & Event
+                    if (existing.status === 'offline') {
+                        await prisma.event.create({
+                            data: {
+                                type: 'online',
+                                message: `Device ${existing.name} came back online`,
+                                deviceId: existing.id
+                            }
+                        });
+
+
+                        if (settings?.notifyOnline || (existing.tags && existing.tags.includes('notify-online'))) {
                             notificationService.add({
                                 type: 'device_status',
                                 title: 'Device Online',
@@ -385,7 +405,9 @@ export async function runScan() {
                             vendor: host.vendor,
                             name: finalName || 'New Device',
                             status: 'online',
-                            type: type
+                            type: type,
+                            mdnsName: host.mdnsName,
+                            netbiosName: host.netbiosName
                         }
                     });
                     await prisma.event.create({
@@ -548,7 +570,42 @@ export async function scanDeviceDetails(deviceInput: { ip: string, os?: string |
                     }
                 });
 
-                // Update Ports
+                // Port Diffing Logic
+                const existingPorts = await prisma.port.findMany({ where: { deviceId: device.id } });
+                const existingPortNumbers = new Set(existingPorts.map(p => p.port));
+                const newPortsDetected: number[] = [];
+
+                if (result.openPorts) {
+                    for (const p of result.openPorts) {
+                        if (!existingPortNumbers.has(p.port)) {
+                            newPortsDetected.push(p.port);
+                        }
+                    }
+                }
+
+                if (newPortsDetected.length > 0) {
+                    const msg = `Security Alert: Device ${device.name || device.ip} opened ${newPortsDetected.length} new port(s): ${newPortsDetected.join(', ')}`;
+                    console.log(msg);
+
+                    // Create Security Event
+                    await prisma.event.create({
+                        data: {
+                            type: 'security_alert',
+                            message: msg,
+                            deviceId: device.id
+                        }
+                    });
+
+                    // Send Notification
+                    notificationService.add({
+                        type: 'security_alert',
+                        title: 'New Ports Detected',
+                        message: msg,
+                        metadata: { deviceId: device.id, ports: newPortsDetected }
+                    });
+                }
+
+                // Update Ports (Overwrite)
                 await prisma.port.deleteMany({ where: { deviceId: device.id } });
                 if (result.openPorts) {
                     for (const p of result.openPorts) {

@@ -7,6 +7,7 @@ import { Device, Settings, SpeedTestResult } from './types';
 import { IconMap } from './iconMap';
 import { DeviceDrawer } from './components/DeviceDrawer';
 import { SpeedTestDashboard } from './components/SpeedTestDashboard';
+import { SecurityDashboard } from './components/SecurityDashboard';
 import { useNotifications } from './context/NotificationContext';
 
 function App() {
@@ -20,7 +21,7 @@ function App() {
     const { notifications, unreadCount, markAsRead, clearNotifications, deleteNotification, isOpen: isNotificationsOpen, setIsOpen: setIsNotificationsOpen } = useNotifications();
 
     // View State
-    const [view, setView] = useState<'scanner' | 'speedtest'>('scanner');
+    const [view, setView] = useState<'scanner' | 'speedtest' | 'security'>('scanner');
 
 
     // UI State
@@ -33,6 +34,7 @@ function App() {
     const [speedHistory, setSpeedHistory] = useState<SpeedTestResult[]>([]);
     const [speedStats, setSpeedStats] = useState<any>(null);
     const [isSpeedTesting, setIsSpeedTesting] = useState(false);
+    const [speedHistoryRange, setSpeedHistoryRange] = useState<'24h' | '7d' | '14d' | '30d'>('24h');
 
     useEffect(() => {
         if (darkMode) {
@@ -62,14 +64,25 @@ function App() {
 
     const fetchSpeedData = async () => {
         try {
+            let query = '?limit=24'; // Default 24h fallback
+            if (speedHistoryRange === '24h') query = '?days=1'; // approx 1 day
+            if (speedHistoryRange === '7d') query = '?days=7';
+            if (speedHistoryRange === '14d') query = '?days=14';
+            if (speedHistoryRange === '30d') query = '?days=30';
+
             const [hist, sts] = await Promise.all([
-                axios.get('/api/speedtest/history?limit=24'),
+                axios.get(`/api/speedtest/history${query}`),
                 axios.get('/api/speedtest/stats')
             ]);
             setSpeedHistory(hist.data);
             setSpeedStats(sts.data);
         } catch (e) { console.error("Failed to fetch speed data", e); }
     };
+
+    // Re-fetch when range changes
+    useEffect(() => {
+        fetchSpeedData();
+    }, [speedHistoryRange]);
 
     const runSpeedTest = async () => {
         setIsSpeedTesting(true);
@@ -90,8 +103,13 @@ function App() {
         fetchSpeedData();
         const interval = setInterval(() => {
             fetchDevices();
-            // Optionally poll speed stats less frequently?
-        }, 10000); // Poll every 10s
+            fetchSettings();
+            if (selectedDevice) {
+                axios.get(`/api/devices/${selectedDevice.id}`)
+                    .then(res => setSelectedDevice(prev => ({ ...prev, ...res.data })))
+                    .catch(e => console.error(e));
+            }
+        }, 5000); // Increased poll rate to 5s for snappier feel
         return () => clearInterval(interval);
     }, []); // eslint-disable-line
 
@@ -102,20 +120,13 @@ function App() {
         }
     }, [view]);
 
-    useEffect(() => {
-        if (!selectedDevice) {
-            return;
-        }
 
-        // Fetch full details (history, events) if not present
-        if (!selectedDevice.history) {
-            axios.get(`/api/devices/${selectedDevice.id}`)
-                .then(res => {
-                    setSelectedDevice(prev => (!prev || prev.id !== res.data.id ? prev : { ...prev, ...res.data }));
-                })
-                .catch(err => console.error(err));
-        }
-    }, [selectedDevice?.id]);
+    // Actually, better to tie it to the main polling interval or just let the main fetchDevices handle it?
+    // Let's add a dedicated refresher in the main poll.
+
+    /*
+     * Better approach: In the main polling interval, if we have a selectedDevice, fetch it too.
+     */
 
 
     const saveSettings = async () => {
@@ -152,6 +163,25 @@ function App() {
         }
         return () => clearInterval(pollInterval);
     }, [scanState.isScanning]);
+
+    // Sync selectedDevice with latest data from devices list for basic fields
+    useEffect(() => {
+        if (selectedDevice && isNotificationsOpen === false) {
+            // Only refresh if valid device selected. 
+            // We can re-fetch just this device to get latest events/history
+            axios.get(`/api/devices/${selectedDevice.id}`)
+                .then(res => {
+                    // Only update if data actually changed significantly or just merge
+                    setSelectedDevice(prev => {
+                        if (prev && prev.id === res.data.id) {
+                            return { ...prev, ...res.data };
+                        }
+                        return prev;
+                    });
+                })
+                .catch(e => console.error("Failed to refresh selected device", e));
+        }
+    }, [scanState.isScanning, devices.length, selectedDevice?.id]); // Refresh when scan finishes or list changes or *selection changes*.
 
     const triggerScan = async () => {
         await axios.post('/api/devices/scan');
@@ -299,9 +329,15 @@ function App() {
                                 </button>
                                 <button
                                     onClick={() => setView('speedtest')}
-                                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${view === 'speedtest' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${view === 'speedtest' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-accent'}`}
                                 >
                                     Speed Monitor
+                                </button>
+                                <button
+                                    onClick={() => setView('security')}
+                                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${view === 'security' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-accent'}`}
+                                >
+                                    Security
                                 </button>
                             </nav>
                         </div>
@@ -465,83 +501,96 @@ function App() {
                 </div>
 
                 {/* Flexible/Scrollable Table Section */}
-                <div className="flex-1 min-h-0 bg-card border rounded-lg shadow-sm overflow-hidden flex flex-col">
-                    {view === 'scanner' ? (
-                        <div className="flex-1 overflow-auto">
-                            <table className="w-full text-left text-sm">
-                                <thead className="sticky top-0 z-10 bg-muted/90 backdrop-blur supports-[backdrop-filter]:bg-muted/60 border-b shadow-sm">
-                                    <tr>
-                                        {visibleColumns.has('type') && <th className="p-4 font-medium w-16">Type</th>}
-                                        {visibleColumns.has('status') && <th className="p-4 font-medium w-24 cursor-pointer hover:text-foreground" onClick={() => handleSort('status')}>Status <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>}
-                                        {visibleColumns.has('name') && <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('name')}>Name <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>}
-                                        {visibleColumns.has('ip') && <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('ip')}>IP Address <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>}
-                                        {visibleColumns.has('os') && <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('os')}>OS / Device <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>}
-                                        {visibleColumns.has('mac') && <th className="p-4 font-medium">MAC Address</th>}
-                                        {visibleColumns.has('vendor') && <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('vendor')}>Vendor <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>}
-                                        {visibleColumns.has('lastSeen') && <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('lastSeen')}>Last Seen <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>}
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y">
-                                    {filteredDevices.map(device => {
-                                        const isNew = isNewDevice(device);
+                {view !== 'security' && (
+                    <div className="flex-1 min-h-0 bg-card border rounded-lg shadow-sm overflow-hidden flex flex-col">
+                        {view === 'scanner' ? (
+                            <div className="flex-1 overflow-auto">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="sticky top-0 z-10 bg-muted/90 backdrop-blur supports-[backdrop-filter]:bg-muted/60 border-b shadow-sm">
+                                        <tr>
+                                            {visibleColumns.has('type') && <th className="p-4 font-medium w-16">Type</th>}
+                                            {visibleColumns.has('status') && <th className="p-4 font-medium w-24 cursor-pointer hover:text-foreground" onClick={() => handleSort('status')}>Status <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>}
+                                            {visibleColumns.has('name') && <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('name')}>Name <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>}
+                                            {visibleColumns.has('ip') && <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('ip')}>IP Address <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>}
+                                            {visibleColumns.has('os') && <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('os')}>OS / Device <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>}
+                                            {visibleColumns.has('mac') && <th className="p-4 font-medium">MAC Address</th>}
+                                            {visibleColumns.has('vendor') && <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('vendor')}>Vendor <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>}
+                                            {visibleColumns.has('lastSeen') && <th className="p-4 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort('lastSeen')}>Last Seen <ArrowUpDown className="inline w-3 h-3 ml-1" /></th>}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y">
+                                        {filteredDevices.map(device => {
+                                            const isNew = isNewDevice(device);
 
-                                        return (
-                                            <tr
-                                                key={device.id}
-                                                onClick={() => setSelectedDevice(device)}
-                                                className={`last:border-0 hover:bg-muted/50 cursor-pointer transition-all 
+                                            return (
+                                                <tr
+                                                    key={device.id}
+                                                    onClick={() => setSelectedDevice(device)}
+                                                    className={`last:border-0 hover:bg-muted/50 cursor-pointer transition-all 
                                                     ${selectedDevice?.id === device.id ? 'bg-muted/50' : ''}
                                                     ${isNew ? 'shadow-[inset_0_0_20px_rgba(45,212,191,0.15)] bg-teal-500/5' : ''}
                                                 `}
-                                            >
-                                                {visibleColumns.has('type') && (
-                                                    <td className="p-4 text-muted-foreground w-16">
-                                                        <div className="relative">
-                                                            {getIcon(device.customType || device.type, device.customVendor || device.vendor, device.customIcon)}
-                                                            {isNew && <span className="absolute -top-1 -right-1 w-2 h-2 bg-teal-400 rounded-full animate-pulse shadow-lg shadow-teal-400" />}
-                                                        </div>
-                                                    </td>
-                                                )}
-                                                {visibleColumns.has('status') && (
-                                                    <td className="p-4">
-                                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${device.status === 'online'
-                                                            ? 'bg-green-500/10 text-green-600 border-green-500/20'
-                                                            : 'bg-muted text-muted-foreground border-border'
-                                                            }`}>
-                                                            <span className={`w-1.5 h-1.5 rounded-full ${device.status === 'online' ? 'bg-green-500' : 'bg-gray-400'}`} />
-                                                            {device.status}
-                                                        </span>
-                                                    </td>
-                                                )}
-                                                {visibleColumns.has('name') && <td className="p-4 font-medium text-foreground">{device.customName || device.name || 'Unknown'}</td>}
-                                                {visibleColumns.has('ip') && <td className="p-4 font-mono text-muted-foreground">{device.ip}</td>}
-                                                {visibleColumns.has('os') && <td className="p-4 text-sm text-muted-foreground">{device.customOS || device.os || '-'}</td>}
-                                                {visibleColumns.has('mac') && <td className="p-4 font-mono text-xs text-muted-foreground">{device.mac}</td>}
-                                                {visibleColumns.has('vendor') && <td className="p-4 text-muted-foreground">{device.customVendor || device.vendor || '-'}</td>}
-                                                {visibleColumns.has('lastSeen') && <td className="p-4 text-muted-foreground whitespace-nowrap text-xs">{format(new Date(device.lastSeen), 'MMM d, HH:mm')}</td>}
+                                                >
+                                                    {visibleColumns.has('type') && (
+                                                        <td className="p-4 text-muted-foreground w-16">
+                                                            <div className="relative">
+                                                                {getIcon(device.customType || device.type, device.customVendor || device.vendor, device.customIcon)}
+                                                                {isNew && <span className="absolute -top-1 -right-1 w-2 h-2 bg-teal-400 rounded-full animate-pulse shadow-lg shadow-teal-400" />}
+                                                            </div>
+                                                        </td>
+                                                    )}
+                                                    {visibleColumns.has('status') && (
+                                                        <td className="p-4">
+                                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${device.status === 'online'
+                                                                ? 'bg-green-500/10 text-green-600 border-green-500/20'
+                                                                : 'bg-muted text-muted-foreground border-border'
+                                                                }`}>
+                                                                <span className={`w-1.5 h-1.5 rounded-full ${device.status === 'online' ? 'bg-green-500' : 'bg-gray-400'}`} />
+                                                                {device.status}
+                                                            </span>
+                                                        </td>
+                                                    )}
+                                                    {visibleColumns.has('name') && <td className="p-4 font-medium text-foreground">{device.customName || device.name || 'Unknown'}</td>}
+                                                    {visibleColumns.has('ip') && <td className="p-4 font-mono text-muted-foreground">{device.ip}</td>}
+                                                    {visibleColumns.has('os') && <td className="p-4 text-sm text-muted-foreground">{device.customOS || device.os || '-'}</td>}
+                                                    {visibleColumns.has('mac') && <td className="p-4 font-mono text-xs text-muted-foreground">{device.mac}</td>}
+                                                    {visibleColumns.has('vendor') && <td className="p-4 text-muted-foreground">{device.customVendor || device.vendor || '-'}</td>}
+                                                    {visibleColumns.has('lastSeen') && <td className="p-4 text-muted-foreground whitespace-nowrap text-xs">{format(new Date(device.lastSeen), 'MMM d, HH:mm')}</td>}
+                                                </tr>
+                                            );
+                                        })}
+                                        {filteredDevices.length === 0 && (
+                                            <tr>
+                                                <td colSpan={visibleColumns.size} className="p-12 text-center text-muted-foreground">
+                                                    No devices found.
+                                                </td>
                                             </tr>
-                                        );
-                                    })}
-                                    {filteredDevices.length === 0 && (
-                                        <tr>
-                                            <td colSpan={visibleColumns.size} className="p-12 text-center text-muted-foreground">
-                                                No devices found.
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    ) : (
-                        <div className="flex-1 overflow-auto p-6">
-                            <SpeedTestDashboard
-                                history={speedHistory}
-                                stats={speedStats}
-                                settings={settings}
-                            />
-                        </div>
-                    )}
-                </div>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <div className="flex-1 overflow-auto p-6">
+                                <SpeedTestDashboard
+                                    history={speedHistory}
+                                    stats={speedStats}
+                                    settings={settings}
+                                    range={speedHistoryRange}
+                                    onRangeChange={setSpeedHistoryRange}
+                                />
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {view === 'security' && (
+                    <div className="max-w-7xl mx-auto overflow-y-auto h-full p-6">
+                        <SecurityDashboard
+                            devices={devices}
+                            onRefresh={fetchDevices}
+                        />
+                    </div>
+                )}
             </div>
 
             {/* Notification Drawer */}

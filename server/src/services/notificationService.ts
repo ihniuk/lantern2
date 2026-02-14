@@ -4,7 +4,7 @@ import crypto from 'crypto';
 
 export interface Notification {
     id: string;
-    type: 'new_device' | 'speed_drop' | 'device_status';
+    type: 'new_device' | 'speed_drop' | 'device_status' | 'security_alert';
     title: string;
     message: string;
     timestamp: string; // ISO string

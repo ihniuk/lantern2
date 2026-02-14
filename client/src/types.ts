@@ -15,11 +15,16 @@ export interface Device {
     createdAt?: string;
     os?: string;
     details?: string;
+    mdnsName?: string;
+    netbiosName?: string;
     events?: Event[];
     latency?: number;
     jitter?: number;
     history?: DeviceHistory[];
     tags?: string[];
+    isBlocked?: boolean;
+    riskScore?: number;
+    vulnerabilities?: string; // JSON string
 }
 
 export interface DeviceHistory {
@@ -60,4 +65,14 @@ export interface SpeedTestResult {
     packetLoss?: number;
     isp?: string;
     serverLocation?: string;
+}
+
+export interface Notification {
+    id: string;
+    type: 'new_device' | 'speed_drop' | 'device_status' | 'security_alert';
+    title: string;
+    message: string;
+    timestamp: string;
+    read: boolean;
+    metadata?: any;
 }

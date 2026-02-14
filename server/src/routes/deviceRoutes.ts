@@ -166,6 +166,23 @@ router.post('/:id/action', async (req, res) => {
         }
     }
 
+    if (type === 'test_event') {
+        try {
+            const event = await prisma.event.create({
+                data: {
+                    type: 'test',
+                    message: `Manual Test Event triggered at ${new Date().toLocaleTimeString()}`,
+                    deviceId: device.id,
+                    timestamp: new Date()
+                }
+            });
+            return res.json({ message: 'Test event created', event });
+        } catch (e) {
+            console.error(e);
+            return res.status(500).json({ error: 'Failed to create test event' });
+        }
+    }
+
     res.json({ message: `Action ${type} triggered for ${device.ip}` });
 });
 

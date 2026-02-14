@@ -22,6 +22,8 @@ model Device {
   tags         String?  // JSON string array ["tag1", "tag2"]
   type        String   @default("unknown") // laptop, desktop, server, router, etc.
   os          String?
+  mdnsName    String?
+  netbiosName String?
   details     String?
   status      String   @default("offline") // online, offline
   lastSeen    DateTime @default(now())
@@ -31,6 +33,11 @@ model Device {
   latency     Float?   // ms
   jitter      Float?   // ms
   
+  // Security
+  isBlocked   Boolean  @default(false)
+  riskScore   Int      @default(0) // 0-100
+  vulnerabilities String? // JSON string of CVEs
+
   // Relations
   ports       Port[]
   events      Event[]
@@ -79,6 +86,7 @@ model Settings {
   notifySpeedDrop Boolean @default(true)
   notifyOnline    Boolean @default(false)
   notifyOffline   Boolean @default(false)
+  namingPriority  String  @default("[\"mdns\", \"netbios\", \"dns\", \"os\"]") // JSON string array
 }
 
 model PushSubscription {

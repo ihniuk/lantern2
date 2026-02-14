@@ -24,6 +24,8 @@ export function DeviceDrawer({ device, onClose, onUpdate, uniqueVendors = [], un
     const [editIcon, setEditIcon] = useState(device.customIcon || '');
     const [editTags, setEditTags] = useState<string[]>(device.tags || []);
     const [actionOutput, setActionOutput] = useState<string | null>(null);
+    const [timeRange, setTimeRange] = useState<'24h' | '7d' | '30d'>('24h');
+    const [showDetails, setShowDetails] = useState(false);
 
     // Sync state when device changes
     useEffect(() => {
@@ -76,6 +78,9 @@ export function DeviceDrawer({ device, onClose, onUpdate, uniqueVendors = [], un
     };
 
     const detailsObj = parseDetails(device.details);
+
+    // Prepare clean object for raw view (exclude heavy relations)
+    const { events, history, ...cleanDevice } = device as any;
 
     return (
         <div className="w-full md:w-[400px] bg-card border-l md:border-l border-t md:border-t-0 p-6 shadow-xl fixed md:relative bottom-0 right-0 h-[60vh] md:h-auto overflow-y-auto z-10 flex flex-col">
@@ -235,11 +240,53 @@ export function DeviceDrawer({ device, onClose, onUpdate, uniqueVendors = [], un
                     )}
                 </div>
                 {!isEditing && (
-                    <button onClick={onClose} className="p-1 hover:bg-accent rounded text-muted-foreground hover:text-foreground">
-                        <X size={20} />
-                    </button>
+                    <div className="flex gap-1">
+                        <button onClick={() => setShowDetails(true)} className="p-1 hover:bg-accent rounded text-muted-foreground hover:text-foreground" title="View Raw Data">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                        </button>
+                        <button onClick={onClose} className="p-1 hover:bg-accent rounded text-muted-foreground hover:text-foreground">
+                            <X size={20} />
+                        </button>
+                    </div>
                 )}
             </div>
+
+            {showDetails && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowDetails(false)}>
+                    <div className="bg-card w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-lg shadow-xl border p-6" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold">Raw Device Data</h2>
+                            <button onClick={() => setShowDetails(false)}><X size={24} /></button>
+                        </div>
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <DetailItem label="IP Address" value={device.ip} mono />
+                                <DetailItem label="MAC Address" value={device.mac} mono />
+                                <DetailItem label="mDNS Name" value={device.mdnsName || '-'} mono />
+                                <DetailItem label="NetBIOS Name" value={device.netbiosName || '-'} mono />
+                                <DetailItem label="Hostname (DNS)" value={detailsObj?.hostname || '-'} mono />
+                                <DetailItem label="Vendor" value={device.vendor || '-'} />
+                            </div>
+
+                            {detailsObj && (
+                                <div>
+                                    <h3 className="font-semibold text-sm mb-2 mt-4 border-b pb-1">Nmap / Scan Details</h3>
+                                    <pre className="bg-muted p-3 rounded-md text-xs font-mono overflow-x-auto whitespace-pre-wrap">
+                                        {JSON.stringify(detailsObj, null, 2)}
+                                    </pre>
+                                </div>
+                            )}
+
+                            <div>
+                                <h3 className="font-semibold text-sm mb-2 mt-4 border-b pb-1">Full Database Record</h3>
+                                <pre className="bg-muted p-3 rounded-md text-xs font-mono overflow-x-auto whitespace-pre-wrap">
+                                    {JSON.stringify(cleanDevice, null, 2)}
+                                </pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {
                 !isEditing && (
@@ -304,13 +351,33 @@ export function DeviceDrawer({ device, onClose, onUpdate, uniqueVendors = [], un
 
                         {/* Uptime Graph */}
                         {device.history && device.history.length > 0 && (
-                            <div className="border-t pt-6 h-48">
-                                <h3 className="font-semibold text-sm mb-4">Uptime History</h3>
-                                <div className="h-full w-full">
+                            <div className="border-t pt-6 h-64">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="font-semibold text-sm">Uptime History</h3>
+                                    <div className="flex bg-muted rounded-md p-0.5">
+                                        {(['24h', '7d', '30d'] as const).map((r) => (
+                                            <button
+                                                key={r}
+                                                onClick={() => setTimeRange(r)}
+                                                className={`px-2 py-0.5 text-xs font-medium rounded-sm transition-colors ${timeRange === r ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                                            >
+                                                {r}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="h-48 w-full">
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <LineChart data={device.history.map(h => ({
+                                        <LineChart data={device.history.filter(h => {
+                                            const now = Date.now();
+                                            const time = new Date(h.timestamp).getTime();
+                                            if (timeRange === '24h') return time > now - 24 * 60 * 60 * 1000;
+                                            if (timeRange === '7d') return time > now - 7 * 24 * 60 * 60 * 1000;
+                                            if (timeRange === '30d') return time > now - 30 * 24 * 60 * 60 * 1000;
+                                            return true;
+                                        }).map(h => ({
                                             time: new Date(h.timestamp).getTime(),
-                                            displayTime: format(new Date(h.timestamp), 'HH:mm'),
+                                            displayTime: format(new Date(h.timestamp), timeRange === '24h' ? 'HH:mm' : 'MMM d'),
                                             status: h.status === 'online' ? 1 : 0
                                         }))}>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#333" />
@@ -320,6 +387,7 @@ export function DeviceDrawer({ device, onClose, onUpdate, uniqueVendors = [], un
                                                 fontSize={10}
                                                 tickLine={false}
                                                 interval="preserveStartEnd"
+                                                minTickGap={30}
                                             />
                                             <YAxis
                                                 hide
@@ -355,6 +423,11 @@ export function DeviceDrawer({ device, onClose, onUpdate, uniqueVendors = [], un
                             <ActionButton label="Ping" icon={<Radio size={16} />} onClick={() => handleAction('ping', 'Ping')} />
                             <ActionButton label="Scan Ports" icon={<Search size={16} />} onClick={() => handleAction('portscan', 'Port Scan')} />
                             <ActionButton label="Wake on LAN" icon={<Play size={16} />} onClick={() => handleAction('wol', 'WOL')} />
+                            <ActionButton label="Test Event" icon={<span className="text-xs font-mono">TEST</span>} onClick={() => {
+                                handleAction('test_event', 'Test Event');
+                                // Refresh after a delay
+                                setTimeout(() => onUpdate({ ...device }), 1000); // Trigger generic update or let poll handle it
+                            }} />
                         </div>
 
                         {/* Console Output */}
