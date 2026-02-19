@@ -15,7 +15,7 @@ function App() {
     const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [settings, setSettings] = useState<Settings>({ scanInterval: 5, scanDuration: 60, ipRange: '', dnsServer: '8.8.8.8', speedTestIntervalMinutes: 60 });
-    const [settingsTab, setSettingsTab] = useState<'scanner' | 'speedtest' | 'notifications'>('scanner');
+    const [settingsTab, setSettingsTab] = useState<'scanner' | 'speedtest' | 'notifications' | 'security'>('scanner');
 
     // Notifications
     const { notifications, unreadCount, markAsRead, clearNotifications, deleteNotification, isOpen: isNotificationsOpen, setIsOpen: setIsNotificationsOpen } = useNotifications();
@@ -723,6 +723,12 @@ function App() {
                             >
                                 Notifications
                             </button>
+                            <button
+                                className={`flex-1 pb-2 text-sm font-medium transition-colors ${settingsTab === 'security' ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                                onClick={() => setSettingsTab('security')}
+                            >
+                                Security
+                            </button>
                         </div>
 
                         <div className="space-y-4">
@@ -756,6 +762,47 @@ function App() {
 
                                 </div>
                             )}
+
+                            {settingsTab === 'security' && (
+                                <div className="space-y-4 py-2">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <label className="text-sm font-bold block">Automated Vulnerability Scans</label>
+                                            <span className="text-xs text-muted-foreground">Periodically scan online devices for CVEs.</span>
+                                        </div>
+                                        <input
+                                            type="checkbox"
+                                            className="toggle"
+                                            checked={settings.enableSecurityScan || false}
+                                            onChange={e => setSettings({ ...settings, enableSecurityScan: e.target.checked })}
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">Scan Interval (Hours)</label>
+                                        <input
+                                            type="number"
+                                            className="w-full p-2 border rounded bg-background"
+                                            min="1"
+                                            max="168"
+                                            value={settings.securityScanIntervalHours || 24}
+                                            onChange={e => setSettings({ ...settings, securityScanIntervalHours: parseInt(e.target.value) })}
+                                        />
+                                        <p className="text-xs text-muted-foreground">How often to run the full vulnerability scan on all online devices.</p>
+                                    </div>
+
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-sm font-medium">Security Alerts</label>
+                                        <input
+                                            type="checkbox"
+                                            className="toggle"
+                                            checked={settings.notifySecurityAlerts !== false}
+                                            onChange={e => setSettings({ ...settings, notifySecurityAlerts: e.target.checked })}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
                             {settingsTab === 'scanner' ? (
                                 <>
                                     <div>

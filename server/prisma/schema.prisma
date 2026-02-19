@@ -35,7 +35,8 @@ model Device {
   
   // Security
   isBlocked   Boolean  @default(false)
-  riskScore   Int      @default(0) // 0-100
+  riskScore       Int?      @default(0)
+  ignoredRiskScore Int?     @default(0)
   vulnerabilities String? // JSON string of CVEs
 
   // Relations
@@ -87,6 +88,11 @@ model Settings {
   notifyOnline    Boolean @default(false)
   notifyOffline   Boolean @default(false)
   namingPriority  String  @default("[\"mdns\", \"netbios\", \"dns\", \"os\"]") // JSON string array
+  
+  // Security Scheduler
+  enableSecurityScan     Boolean @default(false)
+  securityScanIntervalHours Int  @default(24)
+  notifySecurityAlerts   Boolean @default(true)
 }
 
 model PushSubscription {

@@ -194,5 +194,76 @@ export const securityService = {
         });
 
         return vulns;
+    },
+
+    // --- Scheduler ---
+
+    async initScheduler() {
+        console.log("Initializing Security Scheduler...");
+        // Run immediately on startup (or check last run)
+        this.runScheduledScans();
+
+        // Check every hour
+        setInterval(() => this.runScheduledScans(), 60 * 60 * 1000);
+    },
+
+    async runScheduledScans() {
+        try {
+            const settings = await prisma.settings.findFirst();
+            if (!settings || !settings.enableSecurityScan) return;
+
+            const intervalMs = (settings.securityScanIntervalHours || 24) * 60 * 60 * 1000;
+            // Check if last scan was too recent? 
+            // We don't strictly track 'lastSecurityScan' in settings yet, but we can assume if it runs, it runs.
+            // For a robust scheduler, we should store `lastSecurityScan` in Settings.
+            // For MVP, checking every hour and seeing if (now - lastRun > interval) is best.
+            // Let's add `lastSecurityScan` to Settings if possible, or just use a simple memory timestamp for now?
+            // User requested robust settings.
+
+            // Let's check `lastSecurityScan` from the DB (we need to add it to schema or mock it).
+            // Schema didn't have `lastSecurityScan` in my previous edit? 
+            // Correct - I missed adding `lastSecurityScan` to the schema update. 
+            // I will use a simple workaround: Check the latest `Event` of type 'security_scan_complete'?
+            // Or just run it if enabled and rely on the interval being checked.
+
+            // Actually, `setInterval` running every hour is fine, but we need to persist state.
+            // I'll grab the last event.
+            const lastEvent = await prisma.event.findFirst({
+                where: { type: 'security_scheduled_scan' },
+                orderBy: { timestamp: 'desc' }
+            });
+
+            const lastRun = lastEvent ? new Date(lastEvent.timestamp).getTime() : 0;
+            const now = Date.now();
+
+            if (now - lastRun < intervalMs) {
+                return; // Too soon
+            }
+
+            console.log("Running Scheduled Security Scan...");
+
+            // Log start
+            await prisma.event.create({
+                data: {
+                    type: 'security_scheduled_scan',
+                    message: 'Scheduled Security Scan started for all active devices.'
+                }
+            });
+
+            // Get all devices
+            const devices = await prisma.device.findMany({ where: { status: 'online' } });
+
+            // Run sequentially to save resources
+            for (const device of devices) {
+                try {
+                    await this.runVulnerabilityScan(device.id);
+                } catch (e) {
+                    console.error(`Scheduled scan failed for ${device.name}`, e);
+                }
+            }
+
+        } catch (e) {
+            console.error("Security Scheduler Error:", e);
+        }
     }
 };

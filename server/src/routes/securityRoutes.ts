@@ -55,4 +55,22 @@ router.post('/unblock/:id', async (req, res) => {
     }
 });
 
+// Ignore/Acknowledge Risk
+router.post('/ignore/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const device = await prisma.device.findUnique({ where: { id } });
+        if (!device) return res.status(404).json({ error: 'Device not found' });
+
+        await prisma.device.update({
+            where: { id },
+            data: { ignoredRiskScore: device.riskScore }
+        });
+
+        res.json({ message: 'Risk acknowledged' });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message || 'Failed to ignore risk' });
+    }
+});
+
 export default router;

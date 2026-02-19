@@ -24,6 +24,7 @@ export interface Device {
     tags?: string[];
     isBlocked?: boolean;
     riskScore?: number;
+    ignoredRiskScore?: number;
     vulnerabilities?: string; // JSON string
 }
 
@@ -52,7 +53,10 @@ export interface Settings {
     notifySpeedDrop?: boolean;
     notifyOnline?: boolean;
     notifyOffline?: boolean;
-
+    // Security
+    enableSecurityScan?: boolean;
+    securityScanIntervalHours?: number;
+    notifySecurityAlerts?: boolean;
 }
 
 export interface SpeedTestResult {
